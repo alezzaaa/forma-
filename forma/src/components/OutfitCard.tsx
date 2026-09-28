@@ -1,4 +1,5 @@
 import { ArrowLeftRight, Check, Heart, LockKeyhole, Pencil, RotateCw, ThumbsDown } from 'lucide-react';
+import type { CSSProperties } from 'react';
 import type { Garment, Outfit } from '../types';
 import { categorySlot } from '../lib/constants';
 import GarmentArt from './GarmentArt';
@@ -20,9 +21,12 @@ interface OutfitCardProps {
 
 export default function OutfitCard({ outfit, garments, onSave, onWear, onReplace, onReject, onEdit, onRegenerate, lockedIds = [], onToggleLock, compact = false }: OutfitCardProps) {
   const items = outfit.garmentIds.map(id => garments.find(item => item.id === id)).filter((item): item is Garment => Boolean(item));
+  // Several locked accessories get their own cells instead of sharing one absolute position.
+  const useGrid = items.filter(item => categorySlot(item.category) === 'accessory').length > 1 || items.length > 5;
+  const hasLayer = items.some(item => categorySlot(item.category) === 'outerwear');
   return (
     <article className={`outfit-card${compact ? ' outfit-card--compact' : ''}`}>
-      <div className={`outfit-collage outfit-collage--${items.length}`}>
+      <div className={`outfit-collage outfit-collage--${items.length}${hasLayer ? ' outfit-collage--layered' : ''}${useGrid ? ' outfit-collage--grid' : ''}`} style={useGrid ? { '--outfit-grid-rows': Math.ceil(items.length / 2) } as CSSProperties : undefined}>
         <span className="outfit-collage-label">{outfit.style} / {outfit.season}</span>
         {onSave && <button type="button" className={`outfit-heart${outfit.favorite ? ' is-favorite' : ''}`} onClick={() => onSave(outfit)} aria-label={outfit.favorite ? 'Rimuovi outfit dai preferiti' : 'Salva outfit'} title={outfit.favorite ? 'Outfit salvato' : 'Salva outfit'} aria-pressed={outfit.favorite}><Heart size={18} fill={outfit.favorite ? 'currentColor' : 'none'} /></button>}
         <div className="outfit-collage-pieces">

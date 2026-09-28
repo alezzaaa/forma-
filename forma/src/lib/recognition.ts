@@ -3,6 +3,10 @@ import { CATEGORIES, COLORS } from './constants';
 
 export const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 export const MAX_UPLOAD_FILES = 20;
+const MAX_IMAGE_PIXELS = 60_000_000;
+const PHOTO_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'image/bmp', 'image/x-ms-bmp', 'image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence']);
+const PHOTO_EXTENSION = /\.(jpe?g|png|webp|gif|avif|bmp|heic|heif)$/i;
+const isHEIC = (file: File) => /\.(heic|heif)$/i.test(file.name) || /image\/hei[cf]/i.test(file.type);
 export type RecognitionProgress = { phase: string; percent: number };
 export type RecognitionResult = { garment: Garment; categoryDetected: boolean; source: 'local' | 'remote' };
 
@@ -12,11 +16,11 @@ export interface RecognitionProvider {
 }
 
 export function validateImage(file: File): void {
-  if (/\.(heic|heif)$/i.test(file.name) || /image\/hei[cf]/i.test(file.type)) {
-    throw new Error('Le immagini HEIC non sono ancora supportate. Esporta la foto in JPEG o PNG e riprova.');
-  }
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    throw new Error('Scegli una foto JPEG, PNG o WebP.');
+  const mime = file.type.toLowerCase();
+  // Some iPhone/file providers omit the MIME type. Decode capabilities decide
+  // HEIC support; never reject an otherwise supported iPhone photo by extension.
+  if (!PHOTO_MIMES.has(mime) && !((!mime || mime === 'application/octet-stream') && PHOTO_EXTENSION.test(file.name))) {
+    throw new Error('Scegli una foto dalla galleria. JPEG, PNG e WebP sono i formati consigliati.');
   }
   if (file.size > MAX_IMAGE_BYTES) throw new Error('Questa foto supera 12 MB. Scegli una versione più leggera.');
   if (!file.size) throw new Error('Questo file è vuoto. Scegli un’altra foto.');
@@ -24,9 +28,29 @@ export function validateImage(file: File): void {
 
 async function loadImage(src: string): Promise<HTMLImageElement> {
   const img = new Image();
+  img.decoding = 'async';
   img.src = src;
-  try { await img.decode(); } catch { throw new Error('Non riesco a leggere questa foto. Prova un altro file JPEG, PNG o WebP.'); }
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([img.decode(), new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error('decode timeout')), 20_000); })]);
+    if (!img.naturalWidth || !img.naturalHeight || img.naturalWidth * img.naturalHeight > MAX_IMAGE_PIXELS) {
+      img.src = '';
+      throw new Error('La risoluzione della foto è troppo elevata. Riducila sotto 60 megapixel e riprova.');
+    }
+  } catch (error) {
+    img.src = '';
+    if (error instanceof Error && error.message.includes('60 megapixel')) throw error;
+    throw new Error('Non riesco a leggere questa foto. Prova un altro file JPEG, PNG o WebP.');
+  } finally { clearTimeout(timeout); }
   return img;
+}
+
+function normalizedImage(canvas: HTMLCanvasElement, quality = .86): string {
+  const image = canvas.toDataURL('image/webp', quality);
+  // Safari may fall back to PNG when WebP encoding is unavailable. Both keep
+  // backups portable; the original HEIC is never persisted in IndexedDB.
+  if (!/^data:image\/(webp|png|jpeg);base64,/.test(image)) throw new Error('Non riesco a ottimizzare questa foto. Prova con un JPEG o PNG.');
+  return image;
 }
 
 function imageCanvas(image: HTMLImageElement, maxSize = 1280): HTMLCanvasElement {
@@ -91,13 +115,22 @@ export class LocalRecognitionProvider implements RecognitionProvider {
     validateImage(file);
     progress?.({ phase: 'Lettura della foto', percent: 12 });
     const url = URL.createObjectURL(file);
+    let image: HTMLImageElement | undefined;
+    let canvas: HTMLCanvasElement | undefined;
     try {
-      const image = await loadImage(url);
-      if (image.naturalWidth * image.naturalHeight > 90_000_000) throw new Error('La risoluzione della foto è troppo elevata. Riducila e riprova.');
+      try { image = await loadImage(url); }
+      catch (error) {
+        if (isHEIC(file) && !(error instanceof Error && error.message.includes('60 megapixel'))) {
+          throw new Error('Questo browser non riesce ad aprire la foto HEIC. Prova a sceglierla da Foto oppure esportala in JPEG o PNG.');
+        }
+        throw error;
+      }
       progress?.({ phase: 'Ottimizzazione immagine', percent: 45 });
-      const canvas = imageCanvas(image);
-      const compressed = canvas.toDataURL('image/webp', .86);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      canvas = imageCanvas(image);
+      const compressed = normalizedImage(canvas);
       progress?.({ phase: 'Estrazione dei colori', percent: 76 });
+      await new Promise(resolve => setTimeout(resolve, 0));
       const colors = sampleColors(image);
       const filename = file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
       const hinted = categoryHints.find(([regex]) => regex.test(filename));
@@ -110,7 +143,11 @@ export class LocalRecognitionProvider implements RecognitionProvider {
         secondaryColors: colors.secondary, style: 'Casual', seasons, formality: 2, material: '', pattern: 'Da verificare',
         image: compressed, favorite: false, wearCount: 0, lastWorn: null, createdAt: new Date().toISOString(), demo: false,
       } };
-    } finally { URL.revokeObjectURL(url); }
+    } finally {
+      URL.revokeObjectURL(url);
+      if (image) image.src = '';
+      if (canvas) { canvas.width = 0; canvas.height = 0; }
+    }
   }
 }
 
@@ -190,5 +227,9 @@ export async function removeUniformBackground(src: string): Promise<string> {
   }
   if (removed > width * height * .95) throw new Error('Capo e sfondo hanno colori troppo simili. Mantieni la foto originale.');
   ctx.putImageData(frame, 0, 0);
-  return canvas.toDataURL('image/webp', .9);
+  const result = normalizedImage(canvas, .9);
+  image.src = '';
+  canvas.width = 0;
+  canvas.height = 0;
+  return result;
 }

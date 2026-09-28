@@ -18,7 +18,7 @@ try {
   const dangling=structuredClone(data);dangling.outfits[0].garmentIds=['missing'];
   assert.throws(()=>parseBackup(JSON.stringify(dangling)),/inesistente/);
   const noop=()=>{};const asyncNoop=async()=>{};
-  const props={data,onNavigate:noop,onUpload:noop,onEdit:noop,onFavorite:noop,onLock:noop,onWear:noop,onSave:noop,onReject:noop,onCreate:noop,onUpdate:asyncNoop,onDelete:noop,onPreferences:asyncNoop,onImport:noop,onReset:noop,onRemoveDemo:noop,notify:noop,initialLockedIds:[]};
+  const props={data,onNavigate:noop,onUpload:noop,onEdit:noop,onFavorite:noop,onLock:noop,onWear:noop,onSave:noop,onReject:noop,onCreate:noop,onUpdate:asyncNoop,onDelete:noop,onPreferences:asyncNoop,onImport:noop,onReset:noop,onRemoveDemo:noop,onOpenHistory:noop,notify:noop,initialLockedIds:[]};
   for(const name of ['Home','Wardrobe','Collection','History','Settings','CreateOutfit']) {
     const module=await server.ssrLoadModule(`/src/pages/${name}.tsx`);
     for(const current of [data,createEmptyData()]) {
@@ -27,6 +27,12 @@ try {
       assert.ok(!html.includes('NaN'),`${name} has no invalid numbers`);
       assert.ok(!html.includes('undefined'),`${name} has no undefined labels`);
       if(name==='CreateOutfit'&&current.garments.length)assert.equal((html.match(/class="outfit-card"/g)||[]).length,3);
+      if(name==='Settings') {
+        assert.ok(html.includes('Statistiche') && html.includes('30 giorni') && html.includes('Sempre'));
+        assert.ok(html.includes('GET DRESSD 1.1'));
+        assert.ok(html.includes('Apri la cronologia'));
+        if(!current.garments.length) assert.ok(html.includes('Il prossimo colpo di fulmine.'));
+      }
     }
     console.log(`PASS render ${name}: demo + empty`);
   }
@@ -42,6 +48,13 @@ try {
     assert.doesNotThrow(()=>parseBackup(JSON.stringify(withGenerated)));
   }
   console.log('PASS generated outfits match persistence schema');
+  const {default:OutfitCard}=await server.ssrLoadModule('/src/components/OutfitCard.tsx');
+  const accessories=data.garments.filter(item=>item.category==='Accessori');
+  const multipleAccessories={...data.outfits[0],garmentIds:[...data.outfits[0].garmentIds,...accessories.map(item=>item.id)]};
+  const multiHtml=renderToStaticMarkup(createElement(OutfitCard,{outfit:multipleAccessories,garments:data.garments,onWear:noop}));
+  assert.ok(multiHtml.includes('outfit-collage--grid'),'multiple accessories receive separate grid cells');
+  for(const item of accessories) assert.ok(multiHtml.includes(item.name));
+  console.log('PASS multiple accessories have a complete, separate-cell outfit preview');
   if(process.argv.includes('--art')) {
     const {default:Art}=await server.ssrLoadModule('/src/components/GarmentArt.tsx');
     const columns=6,w=200,h=230,rows=Math.ceil(data.garments.length/columns);

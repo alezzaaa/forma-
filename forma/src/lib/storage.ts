@@ -20,7 +20,7 @@ function openDatabase():Promise<IDBDatabase> {
   if (databasePromise) return databasePromise;
   databasePromise = new Promise<IDBDatabase>((resolve,reject) => {
     if (typeof indexedDB === 'undefined') {
-      reject(new Error('Questo browser non supporta il salvataggio locale necessario a FORMA. Usa un browser aggiornato.'));
+      reject(new Error('Questo browser non supporta il salvataggio locale necessario a GET DRESSD. Usa un browser aggiornato.'));
       return;
     }
     let request:IDBOpenDBRequest;
@@ -32,7 +32,7 @@ function openDatabase():Promise<IDBDatabase> {
     request.onerror = () => reject(storageError(request.error));
     request.onblocked = () => {
       blocked = true;
-      reject(new Error('Il guardaroba è aperto in un’altra scheda. Chiudi le altre schede di FORMA e riprova.'));
+      reject(new Error('Il guardaroba è aperto in un’altra scheda. Chiudi le altre schede di GET DRESSD e riprova.'));
     };
     request.onsuccess = () => {
       const db = request.result;
@@ -175,6 +175,6 @@ function validateAppData(value:unknown):AppData {
 export function parseBackup(raw:string):AppData {
   if(typeof raw!=='string'||raw.length>MAX_BACKUP_LENGTH)throw new Error('Il backup supera il limite di 160 MB.');
   let value:unknown;
-  try {value=JSON.parse(raw);} catch {throw new Error('Questo file non è un backup JSON valido di FORMA.');}
+  try {value=JSON.parse(raw);} catch {throw new Error('Questo file non è un backup JSON valido di GET DRESSD.');}
   return validateAppData(value);
 }

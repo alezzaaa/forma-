@@ -1,41 +1,13 @@
-import { useEffect, useId, useRef, useState } from 'react';
-import type { CSSProperties, RefObject } from 'react';
+import { useId, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { Check, Heart, LoaderCircle, Trash2, X } from 'lucide-react';
 import type { Category, Garment, Season, Style } from '../types';
 import { CATEGORIES, COLORS, SEASONS, STYLES } from '../lib/constants';
 import GarmentArt from './GarmentArt';
+import { useModalSheet } from '../lib/useModalSheet';
 import './upload.css';
 
-export function useDialog(onClose: () => void): RefObject<HTMLDivElement | null> {
-  const ref = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    const oldOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    const getFocusable = () => [...(ref.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]') || [])].filter(el => el.getClientRects().length > 0);
-    const frame = requestAnimationFrame(() => (getFocusable()[0] || ref.current)?.focus());
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); }
-      if (event.key !== 'Tab') return;
-      const items = getFocusable();
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (!first) { event.preventDefault(); ref.current?.focus(); return; }
-      if (event.shiftKey && (document.activeElement === first || !ref.current?.contains(document.activeElement))) { event.preventDefault(); last?.focus(); }
-      else if (!event.shiftKey && (document.activeElement === last || !ref.current?.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => {
-      cancelAnimationFrame(frame);
-      document.body.style.overflow = oldOverflow;
-      document.removeEventListener('keydown', onKey);
-      previous?.focus();
-    };
-  }, []);
-  return ref;
-}
+export const useDialog = useModalSheet;
 
 export function garmentValidation(garment: Garment, categoryRequired = false): string | null {
   if (!garment.name.trim()) return 'Dai un nome al capo prima di salvarlo.';
@@ -96,10 +68,10 @@ export default function GarmentEditor({ garment, onClose, onSave, onDelete }: { 
   return <div className="modal-backdrop upload-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
     <div className="modal upload-modal garment-editor" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={ref} tabIndex={-1}>
       <header className="upload-header"><div><span className="upload-eyebrow">IL TUO GUARDAROBA</span><h2 id={titleId}>Ogni dettaglio, a modo tuo.</h2></div><button type="button" className="upload-icon-button" aria-label="Chiudi modifica capo" onClick={close} disabled={busy}><X size={21} /></button></header>
-      <div className="upload-review">
+      <div className="upload-scroll"><div className="upload-review">
         <div className="upload-preview-column"><div className="upload-photo"><GarmentArt garment={draft} /></div><div className="upload-photo-caption"><span>{garment.wearCount} {garment.wearCount === 1 ? 'volta indossato' : 'volte indossato'}</span><span>{garment.lastWorn ? `Ultimo utilizzo: ${new Date(garment.lastWorn).toLocaleDateString('it-IT')}` : 'Pronto per il prossimo outfit'}</span></div></div>
         <div className="upload-form-column"><GarmentFields garment={draft} onChange={setDraft} /></div>
-      </div>
+      </div></div>
       <footer className="upload-footer">
         {error && <p className="upload-error" role="alert">{error}</p>}
         {confirmDelete ? <div className="upload-delete-confirm"><p>Eliminare questo capo dal guardaroba? L’operazione non si può annullare.</p><div><button className="button button-ghost" type="button" onClick={() => setConfirmDelete(false)} disabled={busy}>Annulla</button><button className="button upload-danger" type="button" onClick={remove} disabled={busy}>{busy ? <LoaderCircle size={17} className="upload-spin" /> : <Trash2 size={17} />} Elimina capo</button></div></div> : <div className="upload-footer-actions">{onDelete ? <button type="button" className="upload-icon-button upload-delete" aria-label="Elimina capo" onClick={() => setConfirmDelete(true)} disabled={busy}><Trash2 size={18} /></button> : <span />}<div><button type="button" className="button button-ghost" onClick={close} disabled={busy}>Annulla</button><button type="button" className="button button-primary" onClick={save} disabled={busy}>{busy ? <LoaderCircle size={17} className="upload-spin" /> : <Check size={17} />} Salva modifiche</button></div></div>}

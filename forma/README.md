@@ -1,8 +1,12 @@
-# FORMA
+# GET DRESSD
 
 **Il tuo guardaroba. Più possibilità.**
 
 Una web app in italiano per organizzare i vestiti, comporre outfit e rispondere a «Cosa mi metto oggi?». Interfaccia scura, navigazione per desktop e smartphone, foto personali e salvataggio locale. È un MVP funzionante: non richiede un account né chiavi API.
+
+**Versione 1.1.0:** nuovo nome e icona, widget Statistiche nel profilo, navigazione e schermate ottimizzate per iPhone. La cartella del progetto resta `forma` per mantenere compatibile la pubblicazione esistente. L'archivio del browser e il formato dei backup rimangono compatibili con la versione precedente.
+
+Per aggiornare il sito GitHub Pages già pubblicato, segui [AGGIORNAMENTO.md](AGGIORNAMENTO.md).
 
 ## Aprila subito
 
@@ -20,9 +24,15 @@ npm start
 
 Apri [http://127.0.0.1:4173](http://127.0.0.1:4173). Per questo avvio non serve installare le dipendenze: il server incluso serve la cartella `dist` già pronta. Il comando equivalente è `node serve.mjs`. Lascia aperto il Terminale mentre usi l'app; per arrestarla premi `Ctrl+C`.
 
-**Apertura con doppio clic:** apri `Forma.html` in un browser moderno. È un file autonomo, senza risorse da scaricare. Alcuni browser limitano il salvataggio dei file aperti direttamente: se compare un errore di accesso al guardaroba, usa l'avvio locale descritto sopra. Anche spostare il file può cambiare lo spazio di salvataggio riconosciuto dal browser.
+**Apertura con doppio clic:** apri `GET-DRESSD.html` in un browser moderno. È un file autonomo, senza risorse da scaricare. Alcuni browser limitano il salvataggio dei file aperti direttamente: se compare un errore di accesso al guardaroba, usa l'avvio locale descritto sopra. Anche spostare il file può cambiare lo spazio di salvataggio riconosciuto dal browser.
 
 Non è inclusa una pubblicazione online: `localhost` funziona sul computer che esegue il server.
+
+## Su iPhone
+
+Apri l'indirizzo pubblicato in **Safari**. Per avere GET DRESSD nella Home, apri il menu di condivisione, scegli **Aggiungi alla schermata Home** e conferma. Se Safari mostra l'opzione **Apri come app web**, lasciala attiva. Le istruzioni aggiornate sono nella [guida Apple](https://support.apple.com/it-it/guide/iphone/iphea86e5236/ios).
+
+L'app include icona, nome e visualizzazione autonoma, spazi per notch e indicatore Home, barra di navigazione inferiore, campi di testo più leggibili e controlli adatti al tocco. In **Tu** trovi statistiche, preferenze, backup e accesso alla cronologia. Il sito pubblicato richiede una connessione per il caricamento iniziale: non è incluso un service worker per l'avvio offline. La copia HTML autonoma resta una modalità separata, consigliata soprattutto su desktop.
 
 ## Il primo outfit
 
@@ -39,7 +49,7 @@ Le proposte usano esclusivamente i capi presenti nel guardaroba. Se mancano cate
 In **Guardaroba**, usa il pulsante per aggiungere un capo: scegli le foto dalla galleria, trascinale nella finestra di caricamento oppure usa la fotocamera sui dispositivi che la supportano.
 
 - Una foto per capo, fino a **20 foto per caricamento**.
-- Formati supportati: **JPEG, PNG e WebP**, fino a **12 MB per foto**. Converti prima le immagini HEIC/HEIF in JPEG o PNG.
+- Formati consigliati: **JPEG, PNG e WebP**, fino a **12 MB e 60 megapixel per foto**. Le foto **HEIC/HEIF** vengono aperte se il browser è in grado di decodificarle e convertite in un formato compatibile; quando non è possibile, l'app invita a usare JPEG o PNG. Le foto vengono elaborate una alla volta per contenere l’uso di memoria.
 - L'app ottimizza la foto, estrae colori indicativi e prepara una scheda modificabile. Categoria, stile, stagione, materiale, pattern e formalità vanno verificati prima del salvataggio.
 - La rimozione dello sfondo funziona su **fondi uniformi**, quando il capo si distingue dal fondo. Controlla l'anteprima e torna all'originale se il risultato non è corretto.
 
@@ -56,9 +66,15 @@ Per passare al tuo guardaroba personale, apri il profilo **Il tuo spazio → Rim
 | Crea outfit | Impostare il contesto, confrontare proposte e sostituire singoli elementi. |
 | I tuoi outfit | Conservare i look, assegnare nome e voto, aggiungere note e registrare utilizzi. |
 | Cronologia | Consultare i look indossati e le statistiche su capi e colori. |
-| Il tuo spazio | Scegliere preferenze, ridurre le animazioni e gestire backup e dati. |
+| Il tuo spazio / Tu | Consultare Statistiche, scegliere preferenze, ridurre le animazioni e gestire backup e dati. |
 
 Il motore combina regole su colori, ruoli, stile, stagione e formalità con preferiti, combinazioni apprezzate/rifiutate e utilizzo recente. È un sistema euristico personalizzato; non addestra un modello AI sul tuo profilo.
+
+## Statistiche personali
+
+Il widget **Statistiche** nel profilo mostra capi preferiti, utilizzi, colori e distribuzione del guardaroba. Puoi scegliere **30 giorni** oppure **Sempre**: le metriche di utilizzo vengono calcolate dalla cronologia, mentre dimensioni e composizione descrivono il guardaroba attuale. Un capo viene indicato come preferito solo quando lo hai segnato con il cuore.
+
+Il confronto con amici è previsto come passo successivo. Il modulo `src/lib/statistics.ts` prepara un riepilogo aggregato con periodo e metodo di calcolo, senza esportare foto, nomi dei capi o cronologia individuale. Non ci sono ancora account, amici, classifiche o condivisione automatica.
 
 ## Salvataggio e backup
 
@@ -68,7 +84,7 @@ Per conservare o trasferire il guardaroba:
 
 1. Apri **Il tuo spazio → Esporta backup**. Il file JSON include anche le immagini.
 2. Conserva il file in una posizione a tua scelta.
-3. Nell'altro browser o dispositivo, apri FORMA e scegli **Importa backup**.
+3. Nell'altro browser o dispositivo, apri GET DRESSD e scegli **Importa backup**.
 4. Verifica il riepilogo e conferma: il ripristino **sostituisce** i dati già presenti in quel browser.
 
 Il limite di importazione è **160 MB**. Se il guardaroba cresce molto, controlla le dimensioni del backup ed evita foto inutilmente pesanti. La quantità di dati salvabile dipende anche dalla quota concessa dal browser.
@@ -96,11 +112,11 @@ Apri l'indirizzo indicato dal Terminale, normalmente [http://127.0.0.1:5173](htt
 | `npm run dev` | Avvia il server di sviluppo con aggiornamento automatico. |
 | `npm run build` | Controlla TypeScript e compila la versione statica in `dist`. |
 | `npm run preview` | Verifica localmente l'ultima build prodotta da Vite. |
-| `npm test` | Esegue i test automatici del motore e delle operazioni sui dati. |
+| `npm test` | Esegue i test automatici del motore, delle operazioni sui dati e delle statistiche. |
 | `npm run test:render` | Verifica il rendering HTML delle pagine con dati demo e vuoti. |
-| `npm run package:standalone` | Ricompila e aggiorna il file autonomo `Forma.html`. |
+| `npm run package:standalone` | Ricompila e aggiorna il file autonomo `GET-DRESSD.html`. |
 
-La cartella `dist` può essere pubblicata su un hosting statico. La navigazione usa l'hash dell'URL. Pubblicare il sito non aggiunge account, backup sul server o sincronizzazione: i dati rimangono locali al browser e al nuovo indirizzo. `Forma.html` è la copia autonoma fornita nel pacchetto; dopo modifiche al sorgente usa la build aggiornata in `dist`.
+La cartella `dist` può essere pubblicata su un hosting statico. La navigazione usa l'hash dell'URL. Pubblicare il sito non aggiunge account, backup sul server o sincronizzazione: i dati rimangono locali al browser e al nuovo indirizzo. `GET-DRESSD.html` è la copia autonoma fornita nel pacchetto; dopo modifiche al sorgente usa la build aggiornata in `dist`.
 
 ## Dove intervenire
 
@@ -113,6 +129,7 @@ La cartella `dist` può essere pubblicata su un hosting statico. La navigazione 
 | `src/lib/recognition.ts` | Analisi locale, trattamento immagini e adapter AI remoto. |
 | `src/lib/storage.ts` | IndexedDB e validazione dei backup. |
 | `src/lib/mutations.ts` | Operazioni pure su preferiti, cronologia e rimozione capi. |
+| `src/lib/statistics.ts` | Metriche personali e riepilogo aggregato per futuri confronti. |
 | `src/types.ts` | Contratti TypeScript del dominio. |
 | `src/data/demo.ts` | Guardaroba dimostrativo e creazione del guardaroba vuoto. |
 | `docs/ARCHITECTURE.md` | Scelte architetturali, limiti e punti di estensione. |

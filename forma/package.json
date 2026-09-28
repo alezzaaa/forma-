@@ -1,6 +1,6 @@
 {
-  "name": "forma-wardrobe",
-  "version": "1.0.0",
+  "name": "get-dressd",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {

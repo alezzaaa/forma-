@@ -98,3 +98,110 @@
 @media(max-width:760px){.upload-backdrop{padding:12px}.upload-modal{max-height:calc(100dvh - 24px);border-radius:19px}.upload-header{padding:24px 21px 21px;gap:10px}.upload-header h2{font-size:22px}.upload-eyebrow{font-size:9px;letter-spacing:1.3px}.upload-header p{font-size:11px}.upload-review{grid-template-columns:minmax(0,1fr);padding:22px 21px;gap:23px}.upload-preview-column{position:static}.upload-photo{max-width:310px;aspect-ratio:5/4;margin:0 auto}.upload-background-button{max-width:310px;margin:12px auto 0;display:flex!important}.upload-background-hint{max-width:310px;margin:8px auto 0}.upload-draft-navigation{margin-top:14px}.upload-draft-notice{margin-bottom:18px}.upload-queue{padding:4px 21px 17px}.upload-welcome{padding:0 21px 24px}.upload-dropzone{padding:25px 15px 21px}.upload-tips{gap:18px}.upload-tips>div{gap:8px}.upload-footer{padding:17px 21px 20px;border-radius:0 0 19px 19px}.upload-save-caption{display:none}.upload-footer-actions{justify-content:flex-end}.upload-footer-actions>div{margin-left:auto}.upload-footer-actions .button{font-size:11px;padding:11px 14px}.upload-progress{margin:0 21px 20px}.upload-delete-confirm{align-items:stretch;flex-direction:column;gap:14px}.upload-delete-confirm>div{justify-content:flex-end}.upload-photo-caption{text-align:center;gap:6px;margin-bottom:0}.upload-photo-caption>span:first-child{font-size:12px}.garment-fields .input{font-size:16px}.garment-fields .field{font-size:12px}.upload-fieldset legend{font-size:12px}.upload-color{height:25px;width:25px}.upload-secondary .upload-color{height:21px;width:21px}.upload-choice{font-size:11px;flex:1;padding:9px 8px}.upload-favorite{font-size:12px;padding:8px 0}.upload-color-swatches{gap:10px}}
 @media(max-width:380px){.upload-backdrop{padding:6px}.upload-modal{max-height:calc(100dvh - 12px)}.upload-header h2{font-size:20px}.upload-field-grid{gap:9px}.upload-season-options{gap:5px}.upload-choice{font-size:10px;padding:9px 5px}.upload-tips{flex-direction:column;gap:15px}.upload-queue-item{width:50px;height:59px}.upload-footer-actions .button{padding:10px;font-size:10px}.upload-header{padding:21px 17px}.upload-review{padding:20px 17px}.upload-footer{padding:16px 17px}.upload-welcome{padding:0 17px 22px}}
 @media(prefers-reduced-motion:reduce){.upload-modal,.upload-backdrop,.upload-spin{animation:none}.upload-modal *{transition:none!important}.upload-color:hover{transform:none}}
+
+/* A single scrolling content area keeps actions within reach, also above the
+   iPhone keyboard. Specific selectors protect this layout from shared modals. */
+.modal-backdrop.upload-backdrop {
+  top: var(--dialog-viewport-top, 0px);
+  bottom: auto;
+  height: var(--dialog-viewport-height, 100dvh);
+}
+.modal.upload-modal {
+  display: flex;
+  flex-direction: column;
+  max-width: 950px;
+  max-height: calc(var(--dialog-viewport-height, 100dvh) - 56px);
+  padding: 0;
+  overflow: hidden;
+}
+.modal.upload-modal.upload-empty { max-width: 650px; }
+.upload-header, .upload-footer { flex-shrink: 0; }
+.upload-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scroll-padding-block: 18px; }
+.upload-edit-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
+.upload-error { max-height: 110px; overflow-y: auto; overflow-wrap: anywhere; }
+.upload-footer > .upload-error:last-child { margin-bottom: 0; }
+.upload-modal button { touch-action: manipulation; }
+
+@media (max-width: 760px) {
+  .modal-backdrop.upload-backdrop {
+    align-items: flex-end;
+    padding: max(12px, env(safe-area-inset-top)) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+  }
+  .modal.upload-modal {
+    width: 100%;
+    max-height: calc(var(--dialog-viewport-height, 100dvh) - max(12px, env(safe-area-inset-top)));
+    border-radius: 25px 25px 0 0;
+    border-bottom: 0;
+  }
+  .upload-header { padding: 23px 20px 18px; gap: 12px; }
+  .upload-header h2 { font-size: 24px; line-height: 1.15; letter-spacing: -.8px; }
+  .upload-eyebrow { font-size: 10px; letter-spacing: 1px; margin-bottom: 9px; }
+  .upload-header p { font-size: 13px; line-height: 1.5; margin-top: 10px; }
+  .upload-icon-button { width: 44px; height: 44px; }
+  .upload-welcome { padding: 0 20px 24px; }
+  .upload-dropzone { padding: 22px 16px; border-radius: 20px; }
+  .upload-drop-art { height: 72px; margin-bottom: 12px; }
+  .upload-dropzone strong { font-size: 20px; }
+  .upload-dropzone > span:not(.upload-drop-art):not(.button) { font-size: 13px; }
+  .upload-dropzone .button { font-size: 14px; min-height: 48px; margin: 22px 0 14px; }
+  .upload-dropzone > small { font-size: 11px; line-height: 1.7; }
+  .upload-camera { min-height: 46px; font-size: 14px; width: 100%; justify-content: center; }
+  .upload-tips { gap: 15px; }
+  .upload-tips b { font-size: 12px; }
+  .upload-tips small, .upload-local-note { font-size: 12px; }
+  .upload-local-note { line-height: 1.65; }
+  .upload-queue { padding: 4px 20px 16px; gap: 12px; scroll-snap-type: x proximity; }
+  .upload-queue-item { display: flex; align-items: center; width: 106px; height: 76px; scroll-snap-align: start; }
+  .upload-queue-item > button:first-child { width: 62px; height: 76px; position: relative; flex-shrink: 0; }
+  .upload-queue-remove { position: static; width: 44px; height: 44px; background: transparent; border: 0; flex-shrink: 0; }
+  .upload-queue-remove svg { width: 17px; height: 17px; }
+  .upload-queue-add { width: 48px; height: 66px; }
+  .upload-queue-count { font-size: 12px; }
+  .upload-review { padding: 20px; gap: 24px; }
+  .upload-photo { max-width: 270px; aspect-ratio: 5 / 4; }
+  .upload-background-button { min-height: 44px; font-size: 13px !important; max-width: 100%; }
+  .upload-background-hint { max-width: 100%; font-size: 12px; line-height: 1.6; }
+  .upload-draft-navigation span, .upload-photo-caption, .upload-photo-caption > span:first-child { font-size: 13px; }
+  .upload-draft-notice { font-size: 12px; line-height: 1.5; padding: 12px; }
+  .garment-fields { gap: 20px; }
+  .garment-fields .input { min-height: 48px; height: 48px; font-size: 16px; border-radius: 11px; }
+  .garment-fields .field, .upload-fieldset legend { font-size: 13px; }
+  .upload-current-color, .upload-optional { font-size: 12px; }
+  .upload-field-grid { gap: 12px; }
+  .upload-color-swatches { gap: 5px; padding: 0; }
+  .upload-color, .upload-secondary .upload-color {
+    width: 44px;
+    height: 44px;
+    background: transparent !important;
+    border: 0;
+    box-shadow: none;
+    opacity: 1;
+  }
+  .upload-color::before { content: ''; position: absolute; inset: 8px; border-radius: 50%; background: var(--swatch); border: 1px solid #ffffff25; }
+  .upload-color.selected { box-shadow: none; }
+  .upload-color.selected::before { box-shadow: 0 0 0 3px var(--surface,#191b20), 0 0 0 4px var(--accent,#bdd3e2); }
+  .upload-color svg { position: relative; z-index: 1; }
+  .upload-color:hover { transform: none; }
+  .upload-choice { min-height: 44px; font-size: 12px; padding: 10px 8px; border-radius: 10px; }
+  .upload-favorite { min-height: 44px; font-size: 14px; padding: 8px 0; }
+  .upload-footer { padding: 14px 20px max(16px, env(safe-area-inset-bottom)); border-radius: 0; }
+  .upload-footer-actions { justify-content: space-between; gap: 8px; }
+  .upload-footer-actions > div { gap: 8px; margin-left: auto; }
+  .upload-footer-actions .button, .upload-delete-confirm .button { min-height: 46px; font-size: 13px; padding: 11px 14px; border-radius: 12px; }
+  .upload-delete-confirm p { font-size: 13px; }
+  .upload-error { font-size: 13px; line-height: 1.5; max-height: 84px; padding: 10px 12px; }
+  .upload-progress { margin: 0 20px 20px; padding: 14px; }
+  .upload-progress-text { font-size: 13px; }
+  .upload-progress p { font-size: 12px; }
+  .upload-backdrop[data-keyboard-open] .upload-header { padding-block: 12px; align-items: center; }
+  .upload-backdrop[data-keyboard-open] .upload-eyebrow, .upload-backdrop[data-keyboard-open] .upload-header p { display: none; }
+  .upload-backdrop[data-keyboard-open] .upload-header h2 { font-size: 19px; }
+  .upload-backdrop[data-keyboard-open] .upload-footer { padding-block: 10px; }
+}
+@media (max-width: 380px) {
+  .upload-header, .upload-review, .upload-footer { padding-inline: 16px; }
+  .upload-header h2 { font-size: 22px; }
+  .upload-field-grid { grid-template-columns: 1fr; }
+  .upload-choice { flex-basis: calc(50% - 6px); }
+  .upload-footer-actions .button { padding-inline: 11px; font-size: 12px; }
+}

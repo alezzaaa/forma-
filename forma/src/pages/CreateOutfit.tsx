@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowRight, Check, Cloud, CloudRain, Info, LockKeyhole, Search, Sparkles, Sun, Thermometer, UnlockKeyhole, WandSparkles, X } from 'lucide-react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { ArrowRight, Check, ChevronDown, Cloud, CloudRain, Info, LockKeyhole, Search, SlidersHorizontal, Sparkles, Sun, Thermometer, UnlockKeyhole, WandSparkles, X } from 'lucide-react';
 import type { AppData, GenerateOptions, Outfit, Preferences, Season, Style } from '../types';
 import { currentSeason, OCCASIONS, SEASONS, STYLES } from '../lib/constants';
 import { generateOutfits, outfitSignature, outfitWarnings, replaceGarment } from '../lib/engine';
+import { useModalSheet } from '../lib/useModalSheet';
 import GarmentArt from '../components/GarmentArt';
 import OutfitCard from '../components/OutfitCard';
 import './create.css';
@@ -22,12 +23,15 @@ export default function CreateOutfit({ data, initialLockedIds, onSave, onWear, o
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [lockPicker, setLockPicker] = useState(false);
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const preferencesId = useId();
+  const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
+  const revealResults = useRef(false);
   const generationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const revision = useRef(0);
   const appliedRevision = useRef(0);
-  const modalRef = useRef<HTMLDivElement>(null);
-  const pickerOpenerRef = useRef<HTMLElement | null>(null);
+  const modalRef = useModalSheet(() => setLockPicker(false), lockPicker);
   const initialLockKey = initialLockedIds.join('|');
   const previousLockKey = useRef(initialLockKey);
   const wardrobeKey = JSON.stringify(data.garments.map(item => [item.id, item.name, item.category, item.color, item.colorHex, item.style, item.seasons, item.formality, item.pattern, item.favorite, item.wearCount, item.lastWorn]));
@@ -55,20 +59,17 @@ export default function CreateOutfit({ data, initialLockedIds, onSave, onWear, o
 
   useEffect(() => () => { if (generationTimer.current) clearTimeout(generationTimer.current); }, []);
   useEffect(() => {
-    if (!lockPicker) return;
-    const priorOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    function handleKeys(event: KeyboardEvent) {
-      if (event.key === 'Escape') { setLockPicker(false); return; }
-      if (event.key !== 'Tab') return;
-      const focusable = Array.from(modalRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), input, select, [tabindex="0"]') ?? []);
-      const first = focusable[0], last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-    }
-    document.addEventListener('keydown', handleKeys);
-    return () => { document.body.style.overflow = priorOverflow; document.removeEventListener('keydown', handleKeys); pickerOpenerRef.current?.focus(); };
-  }, [lockPicker]);
+    if (busy || !revealResults.current) return;
+    revealResults.current = false;
+    const frame = requestAnimationFrame(() => {
+      const heading = resultsHeadingRef.current;
+      if (!heading) return;
+      heading.focus({ preventScroll: true });
+      const reduceMotion = data.preferences.reduceMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      heading.scrollIntoView({ behavior: reduceMotion ? 'instant' : 'smooth', block: 'start' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [busy, result, data.preferences.reduceMotion]);
   useEffect(() => {
     if (previousLockKey.current === initialLockKey) return;
     previousLockKey.current = initialLockKey;
@@ -114,6 +115,8 @@ export default function CreateOutfit({ data, initialLockedIds, onSave, onWear, o
       appliedRevision.current = requestedRevision;
       setDirty(false);
       setBusy(false);
+      setPreferencesOpen(false);
+      revealResults.current = true;
     }, data.preferences.reduceMotion ? 0 : 260);
   }
 
@@ -176,6 +179,8 @@ export default function CreateOutfit({ data, initialLockedIds, onSave, onWear, o
     <div className="page-heading create-page-heading"><div><span className="eyebrow">IL TUO STYLIST QUOTIDIANO</span><h1>Un buon outfit.<br className="create-heading-break" /> Una cosa in meno.</h1><p>Dimmi che giornata hai in mente. Al resto pensiamo insieme.</p></div><div className="create-heading-symbol" aria-hidden="true"><WandSparkles size={29} strokeWidth={1.3} /></div></div>
     <div className="create-workspace">
       <aside className="create-controls" aria-label="Preferenze outfit">
+        <button type="button" className="create-context-summary" aria-expanded={preferencesOpen} aria-controls={preferencesId} onClick={() => setPreferencesOpen(open => !open)}><span className="create-context-icon"><SlidersHorizontal size={19} /></span><span className="create-context-copy"><strong>{options.occasion}</strong><span>{options.style} · {options.temperature}° · {options.weather}{options.lockedIds.length > 0 && ` · ${options.lockedIds.length} bloccati`}</span><small>{preferencesOpen ? 'Chiudi preferenze' : 'Personalizza la tua giornata'}</small></span><ChevronDown size={18} className={preferencesOpen ? 'is-expanded' : ''} /></button>
+        <div id={preferencesId} className={`create-preferences${preferencesOpen ? ' is-open' : ''}`}>
         <div className="create-control-heading"><span className="create-step">01</span><div><h2>La tua giornata</h2><p>Il contesto fa la differenza.</p></div></div>
         <label className="field">Dove si va?<select className="input" value={options.occasion} onChange={event => updateOption('occasion', event.target.value)}>{OCCASIONS.map(occasion => <option key={occasion}>{occasion}</option>)}</select></label>
         <div className="field"><span>Il tuo mood</span><div className="create-style-options">{(['Qualsiasi', ...STYLES] as const).map(style => <button type="button" key={style} className={`create-style-chip${options.style === style ? ' is-selected' : ''}`} onClick={() => updateOption('style', style as Style | 'Qualsiasi')} aria-pressed={options.style === style}>{style}</button>)}</div></div>
@@ -185,19 +190,20 @@ export default function CreateOutfit({ data, initialLockedIds, onSave, onWear, o
         <div className="create-select-row"><label className="field">Stagione<select className="input" value={options.season} onChange={event => updateOption('season', event.target.value as Season)}>{SEASONS.map(season => <option key={season}>{season}</option>)}</select></label><label className="field">Formalità<select className="input" value={options.formality} onChange={event => updateOption('formality', Number(event.target.value))}><option value={1}>Rilassato</option><option value={2}>Casual</option><option value={3}>Curato</option><option value={4}>Elegante</option><option value={5}>Formale</option></select></label></div>
         <div className="create-lock-section"><div className="create-lock-title"><LockKeyhole size={15} /><h3>Parti da un capo</h3><span>Opzionale</span></div><p>Le tue sneakers del cuore? Bloccale qui.</p>
           {lockedGarments.length > 0 && <div className="create-locked-items">{lockedGarments.map(item => item && <div className="create-locked-item" key={item.id}><div className="create-lock-thumbnail"><GarmentArt garment={item} /></div><span>{item.name}</span><button type="button" onClick={() => toggleLock(item.id)} aria-label={`Sblocca ${item.name}`}><X size={14} /></button></div>)}</div>}
-          <button type="button" className="create-add-lock" onClick={event => { pickerOpenerRef.current = event.currentTarget; setLockPicker(true); }}><LockKeyhole size={14} />{lockedGarments.length ? 'Aggiungi un altro capo' : 'Scegli dal guardaroba'}<ArrowRight size={14} /></button>
+          <button type="button" className="create-add-lock" onClick={() => setLockPicker(true)}><LockKeyhole size={14} />{lockedGarments.length ? 'Aggiungi un altro capo' : 'Scegli dal guardaroba'}<ArrowRight size={14} /></button>
+        </div>
         </div>
         <button type="button" className="button button-primary create-generate-button" onClick={generate} disabled={busy || !data.garments.length}><Sparkles size={17} className={busy ? 'create-spin' : ''} />{busy ? 'Trovo i tuoi abbinamenti…' : 'Genera i miei outfit'}{!busy && <ArrowRight size={17} />}</button>
         <p className="create-local-note">Solo i tuoi capi. Nuove possibilità.</p>
       </aside>
       <section className={`create-results${busy ? ' is-generating' : ''}`} aria-label="Outfit suggeriti" aria-busy={busy}>
-        <div className="create-results-heading"><div><span className="eyebrow">IL BELLO È GIÀ NEL TUO ARMADIO</span><h2>{result.outfits.length ? `${result.outfits.length} ${result.outfits.length === 1 ? 'possibilità, tutta tua' : 'possibilità, tutte tue'}` : 'Il prossimo outfit parte da qui'}</h2></div>{resultsStale ? <span className="create-dirty-label">Preferenze aggiornate</span> : <span className="create-results-label"><span /> Scelti per te</span>}</div>
+        <div className="create-results-heading"><div><span className="eyebrow">IL BELLO È GIÀ NEL TUO ARMADIO</span><h2 ref={resultsHeadingRef} tabIndex={-1}>{result.outfits.length ? `${result.outfits.length} ${result.outfits.length === 1 ? 'possibilità, tutta tua' : 'possibilità, tutte tue'}` : 'Il prossimo outfit parte da qui'}</h2></div>{resultsStale ? <span className="create-dirty-label">Preferenze aggiornate</span> : <span className="create-results-label"><span /> Scelti per te</span>}</div>
         {resultsStale && <div className="create-warnings" role="status"><Info size={16} /><div><p>Rigenera per applicare le preferenze e i capi bloccati. Le proposte precedenti non sono ancora aggiornate.</p><button type="button" className="button button-ghost" onClick={generate} disabled={busy || !data.garments.length}><Sparkles size={15} />{busy ? 'Aggiornamento…' : 'Rigenera le proposte'}</button></div></div>}
         {!resultsStale && result.warnings.length > 0 && <div className="create-warnings" role="status"><Info size={16} /><div>{result.warnings.map(warning => <p key={warning}>{warning}</p>)}</div></div>}
         {result.outfits.length > 0 ? <div className="create-outfits-grid">{result.outfits.map(outfit => <OutfitCard key={outfit.id} outfit={{ ...outfit, favorite: savedSignatures.has(outfitSignature(outfit.garmentIds)) }} garments={data.garments} onSave={resultsStale || busy ? undefined : item => { if (canUseResults()) onSave(item); }} onWear={resultsStale || busy ? undefined : item => { if (canUseResults()) onWear(item); }} onReplace={resultsStale || busy ? undefined : id => replaceOne(outfit, id)} onRegenerate={resultsStale || busy ? undefined : () => regenerateOne(outfit)} onReject={resultsStale || busy ? undefined : rejectOne} lockedIds={options.lockedIds} onToggleLock={toggleLock} />)}</div> : <div className="create-empty"><div className="create-empty-icon"><Sparkles size={32} strokeWidth={1.3} /></div><h3>Facciamo spazio alle idee.</h3><p>Per un outfit completo servono almeno un top, un pantalone e un paio di scarpe compatibili. Aggiungili al guardaroba, oppure modifica i filtri e i capi bloccati.</p></div>}
         <div className="create-bottom-note"><Sparkles size={15} /><p>Gli abbinamenti considerano colori, stagione, stile e le tue preferenze.<br />Salva quelli che ami: le prossime proposte ti somiglieranno di più.</p></div>
       </section>
     </div>
-    {lockPicker && <div className="create-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setLockPicker(false); }}><div ref={modalRef} className="create-lock-modal" role="dialog" aria-modal="true" aria-labelledby="lock-modal-title"><div className="create-lock-modal-header"><div><span className="eyebrow">OUTFIT LOCK</span><h2 id="lock-modal-title">Quel capo, assolutamente.</h2><p>Scegli uno o più capi. Costruiamo l’outfit attorno a loro.</p></div><button type="button" className="outfit-icon-button" onClick={() => setLockPicker(false)} aria-label="Chiudi selezione capi"><X size={20} /></button></div><div className="create-lock-search"><Search size={17} /><input autoFocus className="input" value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca un capo, un colore…" aria-label="Cerca un capo da bloccare" /></div><div className="create-lock-grid">{filteredGarments.map(item => <button type="button" key={item.id} className={`create-lock-choice${options.lockedIds.includes(item.id) ? ' is-selected' : ''}`} onClick={() => toggleLock(item.id)} aria-pressed={options.lockedIds.includes(item.id)}><div className="create-lock-choice-art"><GarmentArt garment={item} />{options.lockedIds.includes(item.id) && <span><Check size={14} /></span>}</div><strong>{item.name}</strong><small>{item.category} · {item.color}</small></button>)}{!filteredGarments.length && <p className="create-lock-no-results">Nessun capo trovato. Prova un’altra ricerca.</p>}</div><div className="create-lock-modal-footer"><button type="button" className="button button-ghost" onClick={() => updateOption('lockedIds', [])} disabled={!options.lockedIds.length}><UnlockKeyhole size={15} />Sblocca tutti</button><button type="button" className="button button-primary" onClick={() => setLockPicker(false)}>Conferma{options.lockedIds.length > 0 && ` (${options.lockedIds.length})`}<Check size={16} /></button></div></div></div>}
+    {lockPicker && <div className="create-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setLockPicker(false); }}><div ref={modalRef} className="create-lock-modal" tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="lock-modal-title"><div className="create-lock-modal-header"><div><span className="eyebrow">OUTFIT LOCK</span><h2 id="lock-modal-title">Quel capo, assolutamente.</h2><p>Scegli uno o più capi. Costruiamo l’outfit attorno a loro.</p></div><button type="button" className="outfit-icon-button" onClick={() => setLockPicker(false)} aria-label="Chiudi selezione capi"><X size={20} /></button></div><div className="create-lock-search"><Search size={17} /><input className="input" value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca un capo, un colore…" aria-label="Cerca un capo da bloccare" /></div><div className="create-lock-grid">{filteredGarments.map(item => <button type="button" key={item.id} className={`create-lock-choice${options.lockedIds.includes(item.id) ? ' is-selected' : ''}`} onClick={() => toggleLock(item.id)} aria-pressed={options.lockedIds.includes(item.id)}><div className="create-lock-choice-art"><GarmentArt garment={item} />{options.lockedIds.includes(item.id) && <span><Check size={14} /></span>}</div><strong>{item.name}</strong><small>{item.category} · {item.color}</small></button>)}{!filteredGarments.length && <p className="create-lock-no-results">Nessun capo trovato. Prova un’altra ricerca.</p>}</div><div className="create-lock-modal-footer"><button type="button" className="button button-ghost" onClick={() => updateOption('lockedIds', [])} disabled={!options.lockedIds.length}><UnlockKeyhole size={15} />Sblocca tutti</button><button type="button" className="button button-primary" onClick={() => setLockPicker(false)}>Conferma{options.lockedIds.length > 0 && ` (${options.lockedIds.length})`}<Check size={16} /></button></div></div></div>}
   </div>;
 }

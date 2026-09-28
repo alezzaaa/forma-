@@ -1,4 +1,4 @@
--- FORMA: production reference schema (PostgreSQL 15+).
+-- GET DRESSD: production reference schema (PostgreSQL 15+).
 -- This schema is not needed to run the local MVP and is not automatically applied.
 -- Keep object storage private and authorize every request by the authenticated owner.
 BEGIN;

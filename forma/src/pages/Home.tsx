@@ -1,31 +1,80 @@
-import { ArrowUpRight, ArrowRight, Sparkles, Plus, Shirt, Layers3, CalendarDays, MoveUpRight, Sun, LockKeyhole } from 'lucide-react';
-import { useMemo } from 'react';
-import type { AppData, Garment, Outfit } from '../types';
-import GarmentArt from '../components/GarmentArt';
+import { useEffect, useRef, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
+import { ArrowRight, Plus } from 'lucide-react';
+import type { AppData, Category, Garment, Outfit } from '../types';
+import { categorySlot } from '../lib/constants';
+import { outfitSignature, outfitWarnings } from '../lib/engine';
+import { advanceToday, createTodaySession, wardrobeStructureKey } from '../lib/todaySession';
+import type { TodaySession } from '../lib/todaySession';
+import OutfitCard from '../components/OutfitCard';
 import GarmentCard from '../components/GarmentCard';
-import { generateOutfits } from '../lib/engine';
-import { currentSeason } from '../lib/constants';
+import GarmentDetailSheet from '../components/GarmentDetailSheet';
+import GarmentPickerSheet from '../components/GarmentPickerSheet';
+import ReplacementSheet from '../components/ReplacementSheet';
+
 interface Props {
-    data: AppData;
-    onNavigate: (page: string) => void;
-    onUpload: () => void;
-    onEdit: (g: Garment) => void;
-    onFavorite: (g: Garment) => void;
-    onLock: (g: Garment) => void;
-    onWear: (o: Outfit) => void;
+  data: AppData;
+  onNavigate: (page: string) => void;
+  onUpload: (category?: Category) => void;
+  onEdit: (garment: Garment) => void;
+  onFavorite: (garment: Garment) => void;
+  onDelete?: (garment: Garment) => void;
+  onLock: (garment: Garment) => void;
+  onWear: (outfit: Outfit) => Promise<{ alreadyRecorded: boolean }>;
+  session?: TodaySession;
+  setSession?: Dispatch<SetStateAction<TodaySession | null>>;
+  active?: boolean;
+  localDay?: string;
 }
-export default function Home({ data, onNavigate, onUpload, onEdit, onFavorite, onLock, onWear }: Props) {
-    const suggestion = useMemo(() => generateOutfits(data.garments, data.preferences, { occasion: 'Giornata casual', style: data.preferences.preferredStyle, temperature: 20, weather: 'Sereno', formality: 2, lockedIds: [], season: currentSeason() }, 1).outfits[0], [data.garments, data.preferences]);
-    const heroItems = suggestion?.garmentIds.map(id => data.garments.find(g => g.id === id)).filter((g): g is Garment => !!g) ?? [];
-    const worn = data.garments.filter(g => g.wearCount > 0).length;
-    const unused = data.garments.length - worn;
-    const latest = [...data.garments].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 4);
-    return <div className="page home-page"><div className="page-heading"><div><p className="eyebrow">IL TUO SPAZIO, IL TUO STILE</p><h1>{data.preferences.name ? `Ciao, ${data.preferences.name}.` : 'Ogni giorno, più te.'}</h1><p>Tutto quello che ti serve è già nel tuo guardaroba.</p></div><button className="button button-outline" onClick={onUpload}><Plus size={17}/> Aggiungi un capo</button></div>
- <section className="hero"><div className="mobile-today-heading"><div><p className="eyebrow">UN NUOVO GIORNO, UN NUOVO LOOK</p><h2>Cosa mi metto <em>oggi?</em></h2></div><Sparkles size={25} strokeWidth={1.3}/></div><div className="hero-copy"><div className="hero-season"><Sun size={15}/><span>{currentSeason()}, nuove possibilità</span></div><h2>Meno dubbi.<br /><em>Più stile.</em></h2><p>Il prossimo outfit che amerai?<br />Si nasconde tra i capi che hai già.</p><button className="button button-primary hero-cta" onClick={() => onNavigate('create')}><Sparkles size={18}/> Cosa mi metto oggi? <ArrowUpRight size={18}/></button><div className="hero-footnote"><span className="tiny-orbit"/>Il tuo guardaroba. Infinite combinazioni.</div></div>
- <div className="hero-board"><div className="board-topline"><span>THE GET DRESSD EDIT</span><span>N° 01</span></div>{heroItems.length > 0 ? <><div className="hero-flatlay">{heroItems.slice(0, 4).map((g, i) => <button key={g.id} className={`hero-garment hero-garment-${i}`} onClick={() => onEdit(g)} aria-label={`Scopri ${g.name}`}><GarmentArt garment={g}/></button>)}<div className="board-stamp"><span>LESS,</span><em>but better.</em></div></div><div className="board-bottomline"><div><span className="small-caps">SELEZIONATO PER TE</span><h3>{suggestion?.name || 'Everyday, elevated.'}</h3></div><button className="board-wear" onClick={() => onNavigate('create')}>Scopri i look <ArrowUpRight size={18}/></button></div></> : <div className="hero-empty"><Shirt size={55} strokeWidth={1}/><h3>Il tuo stile parte da qui.</h3><button className="button button-dark" onClick={onUpload}>Aggiungi il primo capo</button></div>}</div></section>
- <section className="stats-strip" aria-label="Il guardaroba in numeri">{[{ value: data.garments.length, label: 'Capi nel guardaroba', icon: Shirt }, { value: data.outfits.filter(o => o.favorite).length, label: 'Outfit preferiti', icon: Layers3 }, { value: data.history.length, label: 'Outfit indossati', icon: CalendarDays }, { value: `${data.garments.length ? Math.round(worn / data.garments.length * 100) : 0}%`, label: 'Guardaroba utilizzato', icon: MoveUpRight }].map(({ value, label, icon: Icon }) => <div className="stat" key={label}><div className="stat-value">{value}<Icon size={19}/></div><span>{label}</span></div>)}</section>
- <section><div className="section-heading"><div><p className="eyebrow">IL TUO GUARDAROBA</p><h2>I tuoi ultimi arrivi.</h2></div><button className="text-button" onClick={() => onNavigate('wardrobe')}>Vedi tutti <ArrowRight size={16}/></button></div><div className="garment-grid home-garments">{latest.map(g => <GarmentCard key={g.id} garment={g} onEdit={() => onEdit(g)} onFavorite={() => onFavorite(g)} onLock={() => onLock(g)}/>)}{!latest.length && <button className="empty-wardrobe-card" onClick={onUpload}><Plus size={30}/><h3>Inizia con i tuoi preferiti</h3><p>Carica una foto per ogni capo.</p></button>}</div></section>
- <section className="home-bottom"><div className="rediscover"><div className="insight-icon"><LockKeyhole size={25} strokeWidth={1.4}/></div><div><p className="eyebrow">PARTI DA QUELLO CHE AMI</p><h3>Un capo fisso. Un nuovo punto di vista.</h3><p>Blocca le tue sneakers preferite. Al resto pensiamo noi.</p></div><button className="circle-button" aria-label="Scegli un capo da bloccare" onClick={() => onNavigate('wardrobe')}><ArrowUpRight size={22}/></button></div><button className="small-insight" onClick={() => onNavigate('history')}><span className="eyebrow">DA RISCOPRIRE</span><div><strong>{unused}</strong><ArrowUpRight size={22}/></div><p>capi ancora da indossare.<br />Diamogli una nuova occasione.</p></button></section>
- {data.history.length > 0 && <section className="recent-line"><span className="status-dot"/><span>L’ultimo look: <strong>{data.history[0].name}</strong></span><button className="text-button" onClick={() => onNavigate('history')}>La tua cronologia <ArrowRight size={14}/></button></section>}
- <footer className="page-footer"><span>GET DRESSD</span><span>Meno cose. Più possibilità.</span><span>Fatto per il tuo quotidiano.</span></footer></div>;
+
+export default function Home({ data, onNavigate, onUpload, onEdit, onFavorite, onDelete, onLock, onWear, session: external, setSession: setExternal, active = true, localDay = new Date().toDateString() }: Props) {
+  const [local, setLocal] = useState(() => createTodaySession(data));
+  const session = external ?? local;
+  const setSession = (next: TodaySession) => { if (setExternal) setExternal(next); else setLocal(next); };
+  const [replacement, setReplacement] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Garment | null>(null);
+  const [picker, setPicker] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const sourceKey = wardrobeStructureKey(data);
+  const invalid = sourceKey !== session.sourceKey;
+  useEffect(() => { if (invalid) { setSession(createTodaySession(data)); setReplacement(null); } }, [sourceKey]);
+  useEffect(() => { if (!active) { setReplacement(null); setDetail(null); setPicker(false); } }, [active]);
+  const suggestion = session.outfits[session.index];
+  const signature = suggestion ? outfitSignature(suggestion.garmentIds) : '';
+  const wornToday = data.history.some(event => new Date(event.date).toDateString() === localDay && outfitSignature(event.garmentIds) === signature);
+  const latest = [...data.garments].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 4);
+  const rediscover = [...data.garments].filter(g => g.wearCount <= 1).sort((a, b) => a.wearCount - b.wearCount).slice(0, 4);
+  const missing = ([['top', 'un capo superiore', 'T-shirt'], ['bottom', 'un pantalone', 'Pantaloni'], ['shoes', 'le scarpe', 'Sneakers']] as const).filter(([slot]) => !data.garments.some(g => categorySlot(g.category) === slot));
+  const warnings = suggestion && !invalid ? outfitWarnings([suggestion], data.garments, data.preferences, session.options) : [];
+  function next() { if (!busy && !invalid) setSession(advanceToday(data, session)); }
+  function previous() { if (!busy && session.index > 0) setSession({ ...session, index: session.index - 1, changed: true, exhausted: false }); }
+  function toggleLock(id: string) {
+    const lockedIds = session.options.lockedIds.includes(id) ? session.options.lockedIds.filter(value => value !== id) : [...session.options.lockedIds, id];
+    const outfits = session.outfits.filter(outfit => lockedIds.every(value => outfit.garmentIds.includes(value)));
+    setSession({ ...session, options: { ...session.options, lockedIds }, outfits, index: Math.max(0, outfits.findIndex(o => o.id === suggestion.id)), exhausted: false });
+  }
+  return <div className="page home-page">
+    <h1 className="sr-only" tabIndex={-1}>Oggi</h1>
+    <section className="today-look" aria-label="Outfit per oggi" onTouchStart={event => { const t = event.touches[0]; touch.current = { x: t.clientX, y: t.clientY }; }} onTouchEnd={event => { const start = touch.current; touch.current = null; if (!start || busy) return; const t = event.changedTouches[0], dx = t.clientX - start.x, dy = t.clientY - start.y; if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) { if (dx < 0) next(); else previous(); } }}>
+      {suggestion ? <>
+        <OutfitCard outfit={suggestion} garments={data.garments} eyebrow="Per oggi" showOccasion={false} onWear={onWear} wearLabel={wornToday ? 'Registrato per oggi' : undefined} onHistory={() => onNavigate('history')} onBusyChange={setBusy} disabled={invalid} lockedIds={session.options.lockedIds} onReplace={id => setReplacement(id)} />
+        {warnings.length > 0 && <div className="today-warnings" role="status">{warnings.map(w => <p key={w}>{w}</p>)}</div>}
+        <div className="today-actions"><button className="button button-outline" disabled={busy || invalid} onClick={next}>Cambia</button><button className="text-button" disabled={busy} onClick={() => setPicker(true)}>Parti da un capo <ArrowRight size={16}/></button></div>
+        {session.changed && session.outfits.length > 1 && <div className="today-pagination"><button className="button button-ghost" disabled={busy || session.index === 0} onClick={previous}>Precedente</button><span role="status" aria-live="polite">{session.index + 1} di {session.outfits.length}</span><button className="button button-ghost" disabled={busy} onClick={next}>Successivo</button></div>}
+        {session.exhausted && <p className="today-limit" role="status">Hai visto tutte le proposte disponibili.{session.outfits.length === 1 && ' Aggiungi capi o modifica le preferenze per altre combinazioni.'}</p>}
+      </> : <div className="empty-state">
+        <h2>{!data.garments.length ? 'Aggiungi i tuoi primi capi' : missing.length ? `Mancano ${missing.map(([, label]) => label).join(' e ')} per completare il look.` : 'Nessun outfit con queste preferenze.'}</h2>
+        {!data.garments.length && <p>Per un outfit completo servono un capo superiore, un pantalone e un paio di scarpe.</p>}
+        {!missing.length && data.garments.length > 0 && <button className="button button-primary" onClick={() => onNavigate('create')}>Modifica preferenze</button>}
+        <button className={`button ${missing.length ? 'button-primary' : 'button-outline'}`} onClick={() => onUpload(missing[0]?.[2])}>Aggiungi capo</button>
+      </div>}
+    </section>
+    {data.garments.some(g => g.demo) && <p className="today-demo">Stai esplorando capi di esempio. <button className="text-button" onClick={() => onUpload()}>Aggiungi i tuoi capi</button></p>}
+    <section className="today-secondary"><div className="section-heading"><h2>Continua il guardaroba</h2><button className="text-button" onClick={() => onNavigate('wardrobe')}>Guardaroba <ArrowRight size={16}/></button></div><div className="garment-grid home-garments">{latest.map(g => <GarmentCard key={g.id} garment={g} onOpen={() => setDetail(g)}/>)}</div><button className="button button-outline" onClick={() => onUpload()}><Plus size={18}/>Aggiungi capo</button></section>
+    {rediscover.length >= 2 && <section className="today-secondary"><div className="section-heading"><h2>Da riscoprire</h2></div><div className="garment-grid home-garments">{rediscover.map(g => <GarmentCard key={g.id} garment={g} onOpen={() => setDetail(g)}/>)}</div></section>}
+    {active && picker && <GarmentPickerSheet garments={data.garments} onClose={() => setPicker(false)} onConfirm={ids => { setPicker(false); const garment = data.garments.find(g => g.id === ids[0]); if (garment) onLock(garment); }}/ >}
+    {active && replacement && suggestion && !invalid && <ReplacementSheet outfit={suggestion} garmentId={replacement} garments={data.garments} preferences={data.preferences} options={session.options} excludedSignatures={session.outfits.filter(o => o.id !== suggestion.id).map(o => outfitSignature(o.garmentIds))} onClose={() => setReplacement(null)} onToggleLock={toggleLock} onDetails={g => { setReplacement(null); setDetail(g); }} onUpload={() => { setReplacement(null); onUpload(); }} onPreferences={() => { setReplacement(null); onNavigate('create'); }} onApply={outfit => { setSession({ ...session, outfits: session.outfits.map(o => o.id === suggestion.id ? outfit : o), seen: [...session.seen, outfitSignature(outfit.garmentIds)] }); setReplacement(null); }}/ >}
+    {active && detail && data.garments.some(g => g.id === detail.id) && <GarmentDetailSheet garment={data.garments.find(g => g.id === detail.id)!} onClose={() => setDetail(null)} onCreate={onLock} onEdit={onEdit} onFavorite={onFavorite} onDelete={onDelete}/ >}
+  </div>;
 }

@@ -126,10 +126,9 @@ function combinationScore(items: Garment[], preferences: Preferences, options: G
   return score;
 }
 
-function describe(items: Garment[], options: GenerateOptions): string {
+function describe(items: Garment[]): string {
   const top = items.find(item => categorySlot(item.category) === 'top');
   const bottom = items.find(item => categorySlot(item.category) === 'bottom');
-  const outerwear = items.find(item => categorySlot(item.category) === 'outerwear');
   if (!top || !bottom) return 'Una combinazione costruita con i capi del tuo guardaroba.';
   const colors = new Set(items.map(item => item.color.toLowerCase()));
   const colorSentence = colors.size === 1
@@ -137,18 +136,8 @@ function describe(items: Garment[], options: GenerateOptions): string {
     : top.color.toLowerCase() === bottom.color.toLowerCase()
       ? `Una base in ${top.color.toLowerCase()} lascia spazio ai dettagli.`
     : `${top.color} e ${bottom.color.toLowerCase()}: una base ${colorInfo(top).neutral || colorInfo(bottom).neutral ? 'equilibrata, facile da abbinare' : 'a colori, con carattere'}.`;
-  const occasionPhrases: Record<string, string> = {
-    'Università': "l'università", 'Lavoro': 'il lavoro', 'Appuntamento': 'un appuntamento',
-    'Aperitivo': 'un aperitivo', 'Cena': 'una cena', 'Festa': 'una festa', 'Serata': 'una serata',
-    'Palestra': 'la palestra', 'Viaggio': 'un viaggio', 'Giornata casual': 'una giornata casual',
-  };
-  const warmth = outerwear && options.temperature <= 14
-    ? `${outerwear.name} aggiunge uno strato per i ${options.temperature}°.`
-    : items.some(item => !appropriateTemperature(item, options.temperature))
-      ? 'Il capo bloccato guida il look: valuta il caldo previsto.'
-    : options.temperature >= 25 ? 'Strati leggeri per la giornata calda.'
-      : `Pensato per ${occasionPhrases[options.occasion] ?? options.occasion.toLowerCase()}.`;
-  return `${colorSentence} ${warmth}`;
+  return colorSentence;
+
 }
 
 function inferredStyle(items: Garment[], preferences: Preferences): Style {
@@ -165,8 +154,29 @@ function createOutfit(items: Garment[], preferences: Preferences, options: Gener
     garmentIds: ordered(items).map(item => item.id), occasion: options.occasion, season: options.season,
     style: options.style === 'Qualsiasi' ? inferredStyle(items, preferences) : options.style,
     rating: 0, favorite: false, createdAt: new Date().toISOString(), lastWorn: null,
-    notes: '', explanation: describe(items, options), score,
+    notes: '', explanation: describe(items), score,
   };
+}
+
+/** Wear events have no context: their entry draft uses an empty occasion sentinel.
+ * Resolve it before exposing any save/wear action, keeping the persisted Outfit schema intact.
+ */
+export function prepareInitialDraft(draft: Outfit, garments: Garment[], preferences: Preferences, options: GenerateOptions): Outfit {
+  const items = draft.garmentIds.map(id => garments.find(item => item.id === id)).filter((item): item is Garment => Boolean(item));
+  const context = draft.occasion ? { ...options, occasion: draft.occasion, season: draft.season, style: draft.style } : options;
+  return { ...draft, garmentIds: [...draft.garmentIds], occasion: context.occasion, season: context.season,
+    style: context.style === 'Qualsiasi' ? inferredStyle(items, preferences) : context.style,
+    explanation: describe(items), score: Math.max(0, Math.min(100, Math.round(combinationScore(items, preferences, context)))) };
+}
+
+/** The same structural guard applies to restored drafts and manual replacements. */
+export function isCompleteOutfit(outfit: Outfit, garments: Garment[]): boolean {
+  if (new Set(outfit.garmentIds).size !== outfit.garmentIds.length) return false;
+  const byId = new Map(garments.map(item => [item.id, item]));
+  if (outfit.garmentIds.some(id => !byId.has(id))) return false;
+  const items = outfit.garmentIds.map(id => byId.get(id)!);
+  return REQUIRED_SLOTS.every(slot => items.filter(item => categorySlot(item.category) === slot).length === 1)
+    && items.filter(item => categorySlot(item.category) === 'outerwear').length <= 1;
 }
 
 /** Re-check the outfits actually shown after regeneration or a single-piece replacement.
@@ -199,7 +209,7 @@ export function outfitWarnings(outfits: Outfit[], garments: Garment[], preferenc
 }
 
 /** Generates complete, ranked combinations. Locks are hard constraints; taste is a soft preference. */
-export function generateOutfits(garments: Garment[], preferences: Preferences, options: GenerateOptions, count = 3): GenerateResult {
+export function generateOutfits(garments: Garment[], preferences: Preferences, options: GenerateOptions, count = 3, excludedSignatures: readonly string[] = []): GenerateResult {
   const warnings: string[] = [];
   const requested = Number.isFinite(count) ? Math.max(0, Math.min(20, Math.floor(count))) : 3;
   if (!requested) return { outfits: [], warnings };
@@ -248,7 +258,9 @@ export function generateOutfits(garments: Garment[], preferences: Preferences, o
     beam = beam.flatMap(items => [items, ...accessories.map(item => [...items, item])]);
   }
   // De-duplicate before diversity selection; a single wardrobe combination is never repeated.
-  const candidates = [...new Map(beam.map(items => [outfitSignature(items.map(item => item.id)), items])).values()]
+  const excluded = new Set([...excludedSignatures, ...preferences.dislikedSignatures]);
+  const candidates = [...new Map(beam.map(items => [outfitSignature(items.map(item => item.id)), items])).entries()]
+    .filter(([signature]) => !excluded.has(signature)).map(([, items]) => items)
     .map(items => ({ items, score: combinationScore(items, preferences, options) }));
   const chosen: Garment[][] = [];
   while (chosen.length < requested && candidates.length) {
@@ -265,20 +277,43 @@ export function generateOutfits(garments: Garment[], preferences: Preferences, o
   return { outfits, warnings: [...new Set([...warnings, ...outfitWarnings(outfits, inventory, preferences, options)])] };
 }
 
-/** Replaces exactly one unlocked slot while preserving every other garment and the outfit identity. */
-export function replaceGarment(outfit: Outfit, garmentId: string, garments: Garment[], preferences: Preferences, options: GenerateOptions): Outfit | null {
-  if (!outfit.garmentIds.includes(garmentId) || options.lockedIds.includes(garmentId)) return null;
+/** Candidates for one explicit replacement. Other IDs and hard locks stay intact.
+ * Taste/season/formality remain weighted preferences, while temperature is a hard constraint.
+ */
+export function getReplacementCandidates(outfit: Outfit, garmentId: string, garments: Garment[], preferences: Preferences, options: GenerateOptions, excludedSignatures: readonly string[] = []): Garment[] {
+  if (!outfit.garmentIds.includes(garmentId) || options.lockedIds.includes(garmentId)) return [];
+  if (!isCompleteOutfit(outfit, garments)) return [];
   const byId = new Map(garments.map(item => [item.id, item]));
-  if (outfit.garmentIds.some(id => !byId.has(id)) || options.lockedIds.some(id => !outfit.garmentIds.includes(id))) return null;
+  if (outfit.garmentIds.some(id => !byId.has(id)) || options.lockedIds.some(id => !outfit.garmentIds.includes(id))) return [];
+  const allItems = outfit.garmentIds.map(id => byId.get(id)!);
   const current = byId.get(garmentId)!;
-  const retained = outfit.garmentIds.filter(id => id !== garmentId).map(id => byId.get(id)!);
-  const alternatives = uniqueItems(garments).filter(item => categorySlot(item.category) === categorySlot(current.category)
-    && !outfit.garmentIds.includes(item.id) && appropriateTemperature(item, options.temperature));
-  alternatives.sort((a, b) => combinationScore([...retained, b], preferences, options) - combinationScore([...retained, a], preferences, options));
-  if (!alternatives.length) return null;
-  const items = [...retained, alternatives[0]];
-  return { ...outfit, garmentIds: ordered(items).map(item => item.id), explanation: describe(items, options),
+  const retained = allItems.filter(item => item.id !== garmentId);
+  const excluded = new Set([...excludedSignatures, ...preferences.dislikedSignatures]);
+  return uniqueItems(garments).filter(item => categorySlot(item.category) === categorySlot(current.category)
+    && !outfit.garmentIds.includes(item.id) && appropriateTemperature(item, options.temperature)
+    && !excluded.has(outfitSignature([...retained.map(part => part.id), item.id])))
+    .sort((a, b) => combinationScore([...retained, b], preferences, options) - combinationScore([...retained, a], preferences, options) || a.id.localeCompare(b.id));
+}
+
+/** Applies a user-selected candidate after revalidating the current inventory.
+ * A changed combination is always a new draft; saved outfits and wear events are untouched.
+ */
+export function replaceGarmentWith(outfit: Outfit, garmentId: string, garments: Garment[], preferences: Preferences, options: GenerateOptions, replacementId: string, excludedSignatures: readonly string[] = []): Outfit | null {
+  const replacement = getReplacementCandidates(outfit, garmentId, garments, preferences, options, excludedSignatures).find(item => item.id === replacementId);
+  if (!replacement) return null;
+  const byId = new Map(garments.map(item => [item.id, item]));
+  const items = outfit.garmentIds.map(id => id === garmentId ? replacement : byId.get(id)!);
+  return { ...outfit, id: globalThis.crypto.randomUUID(), createdAt: new Date().toISOString(),
+    garmentIds: items.map(item => item.id), explanation: describe(items),
     score: Math.max(0, Math.min(100, Math.round(combinationScore(items, preferences, options)))),
     style: options.style === 'Qualsiasi' ? inferredStyle(items, preferences) : options.style,
-    favorite: false, rating: 0, lastWorn: null };
+    favorite: false, rating: 0, lastWorn: null, notes: '' };
+}
+
+/** Legacy best-candidate API; new interactive surfaces use replaceGarmentWith. */
+export function replaceGarment(outfit: Outfit, garmentId: string, garments: Garment[], preferences: Preferences, options: GenerateOptions): Outfit | null {
+  const candidate = getReplacementCandidates(outfit, garmentId, garments, preferences, options)[0];
+  if (!candidate) return null;
+  const replacement = replaceGarmentWith(outfit, garmentId, garments, preferences, options, candidate.id);
+  return replacement ? { ...replacement, id: outfit.id, createdAt: outfit.createdAt } : null;
 }

@@ -1,209 +1,215 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { ArrowRight, Check, ChevronDown, Cloud, CloudRain, Info, LockKeyhole, Search, SlidersHorizontal, Sparkles, Sun, Thermometer, UnlockKeyhole, WandSparkles, X } from 'lucide-react';
-import type { AppData, GenerateOptions, Outfit, Preferences, Season, Style } from '../types';
-import { currentSeason, OCCASIONS, SEASONS, STYLES } from '../lib/constants';
-import { generateOutfits, outfitSignature, outfitWarnings, replaceGarment } from '../lib/engine';
-import { useModalSheet } from '../lib/useModalSheet';
+import { ChevronDown, LockKeyhole, X } from 'lucide-react';
+import type { AppData, Garment, GenerateOptions, GenerateResult, Outfit, Preferences, Season, Style } from '../types';
+import { currentSeason, SEASONS, STYLES } from '../lib/constants';
+import { generateOutfits, isCompleteOutfit, outfitSignature, outfitWarnings, prepareInitialDraft } from '../lib/engine';
 import GarmentArt from '../components/GarmentArt';
+import GarmentPickerSheet from '../components/GarmentPickerSheet';
+import ReplacementSheet from '../components/ReplacementSheet';
 import OutfitCard from '../components/OutfitCard';
+import OutfitCarousel from '../components/OutfitCarousel';
 import './create.css';
 
 interface CreateOutfitProps {
   data: AppData;
   initialLockedIds: string[];
-  onSave: (outfit: Outfit) => void;
-  onWear: (outfit: Outfit) => void;
-  onReject: (outfit: Outfit) => void;
+  initialDraft?: Outfit;
+  initialEntryRevision?: number;
+  active?: boolean;
+  onSave: (outfit: Outfit) => Promise<void> | void;
+  onWear: (outfit: Outfit) => Promise<{ alreadyRecorded: boolean } | void> | void;
+  onReject: (outfit: Outfit) => Promise<void> | void;
+  onUpload?: () => void;
+  onDetails?: (garment: Garment) => void;
   notify: (message: string) => void;
 }
+const QUICK_OCCASIONS = ['Giornata casual', 'Lavoro', 'Aperitivo', 'Cena'];
+const OTHER_OCCASIONS = ['Università', 'Appuntamento', 'Festa', 'Serata', 'Palestra', 'Viaggio'];
+const occasionLabel = (occasion: string) => occasion === 'Giornata casual' ? 'Tutti i giorni' : occasion;
 
-export default function CreateOutfit({ data, initialLockedIds, onSave, onWear, onReject, notify }: CreateOutfitProps) {
-  const [options, setOptions] = useState<GenerateOptions>(() => ({ occasion: 'Giornata casual', style: data.preferences.preferredStyle, temperature: 20, weather: 'Sereno', formality: 2, lockedIds: initialLockedIds.filter(id => data.garments.some(g => g.id === id)), season: currentSeason() }));
-  const [result, setResult] = useState(() => generateOutfits(data.garments, data.preferences, options, 3));
+export default function CreateOutfit({ data, initialLockedIds, initialDraft, initialEntryRevision = 0, active = true, onSave, onWear, onReject, onUpload, onDetails, notify }: CreateOutfitProps) {
+  const [options, setOptions] = useState<GenerateOptions>(() => ({ occasion: initialDraft?.occasion || 'Giornata casual', style: initialDraft?.occasion ? initialDraft.style : data.preferences.preferredStyle, temperature: 20, weather: 'Sereno', formality: 2, lockedIds: initialDraft ? [] : initialLockedIds.filter(id => data.garments.some(item => item.id === id)), season: initialDraft?.occasion ? initialDraft.season : currentSeason() }));
+  const [result, setResult] = useState<GenerateResult>(() => ({ outfits: initialDraft ? [prepareInitialDraft(initialDraft, data.garments, data.preferences, options)] : [], warnings: [] }));
+  const [hasGenerated, setHasGenerated] = useState(Boolean(initialDraft));
   const [busy, setBusy] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [invalidatedOutfitIds, setInvalidatedOutfitIds] = useState<Set<string>>(() => new Set());
+  const [editing, setEditing] = useState(!initialDraft);
   const [lockPicker, setLockPicker] = useState(false);
+  const [replacement, setReplacement] = useState<{ outfitId: string; garmentId: string } | null>(null);
   const [preferencesOpen, setPreferencesOpen] = useState(false);
-  const [query, setQuery] = useState('');
+  const [moreOccasionsOpen, setMoreOccasionsOpen] = useState(false);
+  const [exhausted, setExhausted] = useState(false);
+  const [carouselReset, setCarouselReset] = useState(0);
   const preferencesId = useId();
+  const otherId = useId();
   const resultsHeadingRef = useRef<HTMLHeadingElement>(null);
-  const revealResults = useRef(false);
-  const generationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const generationFrame = useRef<number | null>(null);
+  const latestActive = useRef(active);
+  latestActive.current = active;
   const revision = useRef(0);
   const appliedRevision = useRef(0);
-  const modalRef = useModalSheet(() => setLockPicker(false), lockPicker);
+  const seenSignatures = useRef(new Set(initialDraft ? [outfitSignature(initialDraft.garmentIds)] : []));
   const initialLockKey = initialLockedIds.join('|');
-  const previousLockKey = useRef(initialLockKey);
-  const wardrobeKey = JSON.stringify(data.garments.map(item => [item.id, item.name, item.category, item.color, item.colorHex, item.style, item.seasons, item.formality, item.pattern, item.favorite, item.wearCount, item.lastWorn]));
+  const draftKey = initialDraft?.id ?? '';
+  const entryKey = `${initialEntryRevision}::${initialLockKey}::${draftKey}`;
+  const previousEntryKey = useRef(entryKey);
+  // Usage/favorite changes must never move a proposal while it is being used.
+  const wardrobeKey = JSON.stringify(data.garments.map(item => [item.id, item.name, item.category, item.color, item.colorHex, item.style, item.seasons, item.formality, item.pattern, item.image]));
   const previousWardrobeKey = useRef(wardrobeKey);
-  const sourceKey = `${initialLockKey}::${wardrobeKey}`;
+  const sourceKey = `${entryKey}::${wardrobeKey}`;
   const latestSourceKey = useRef(sourceKey);
   latestSourceKey.current = sourceKey;
-  const sourcesChanged = previousWardrobeKey.current !== wardrobeKey || previousLockKey.current !== initialLockKey;
-  const resultsStale = dirty || sourcesChanged;
+  const latestData = useRef(data);
+  latestData.current = data;
+  const sourcesChanged = previousWardrobeKey.current !== wardrobeKey || previousEntryKey.current !== entryKey;
+  const resultsStale = dirty || sourcesChanged || appliedRevision.current !== revision.current;
+  const needsLocks = (outfit: Outfit) => options.lockedIds.some(id => !outfit.garmentIds.includes(id));
+  const invalidated = (outfit: Outfit) => invalidatedOutfitIds.has(outfit.id) || needsLocks(outfit) || !isCompleteOutfit(outfit, data.garments);
+  const needsUpdate = resultsStale || result.outfits.some(invalidated);
 
   function invalidateResults() {
     revision.current += 1;
-    if (generationTimer.current !== null) { clearTimeout(generationTimer.current); generationTimer.current = null; }
-    setBusy(false);
-    setDirty(true);
+    if (generationFrame.current !== null) { cancelAnimationFrame(generationFrame.current); generationFrame.current = null; }
+    setBusy(false); setDirty(true); setExhausted(false); setReplacement(null);
   }
-
-  function canUseResults() {
-    if (busy || resultsStale || appliedRevision.current !== revision.current || latestSourceKey.current !== sourceKey) {
-      notify('Rigenera per applicare le preferenze e i capi bloccati prima di scegliere un outfit.');
-      return false;
+  function canUse(outfit?: Outfit) {
+    if (busy || resultsStale || appliedRevision.current !== revision.current || latestSourceKey.current !== sourceKey || (outfit && invalidated(outfit))) {
+      notify('Le proposte vanno aggiornate.'); return false;
     }
     return true;
   }
-
-  useEffect(() => () => { if (generationTimer.current) clearTimeout(generationTimer.current); }, []);
+  useEffect(() => () => { if (generationFrame.current !== null) cancelAnimationFrame(generationFrame.current); }, []);
+  useEffect(() => { if (!active) { setLockPicker(false); setReplacement(null); } }, [active]);
   useEffect(() => {
-    if (busy || !revealResults.current) return;
-    revealResults.current = false;
-    const frame = requestAnimationFrame(() => {
-      const heading = resultsHeadingRef.current;
-      if (!heading) return;
-      heading.focus({ preventScroll: true });
-      const reduceMotion = data.preferences.reduceMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      heading.scrollIntoView({ behavior: reduceMotion ? 'instant' : 'smooth', block: 'start' });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [busy, result, data.preferences.reduceMotion]);
-  useEffect(() => {
-    if (previousLockKey.current === initialLockKey) return;
-    previousLockKey.current = initialLockKey;
-    setOptions(previous => ({ ...previous, lockedIds: initialLockedIds.filter(id => data.garments.some(g => g.id === id)) }));
+    if (previousEntryKey.current === entryKey) return;
+    previousEntryKey.current = entryKey;
     invalidateResults();
-  }, [initialLockKey, initialLockedIds, data.garments]);
+    setPreferencesOpen(false); setEditing(!initialDraft); setMoreOccasionsOpen(false);
+    if (initialDraft) {
+      const nextOptions = { ...options, ...(initialDraft.occasion ? { occasion: initialDraft.occasion, style: initialDraft.style, season: initialDraft.season } : {}), lockedIds: [] };
+      setOptions(nextOptions);
+      setResult({ outfits: [prepareInitialDraft(initialDraft, data.garments, data.preferences, nextOptions)], warnings: [] }); setHasGenerated(true);
+      setInvalidatedOutfitIds(new Set());
+      appliedRevision.current = revision.current; setDirty(false);
+      seenSignatures.current = new Set([outfitSignature(initialDraft.garmentIds)]); setCarouselReset(previous => previous + 1);
+    } else {
+      setOptions(previous => ({ ...previous, lockedIds: initialLockedIds.filter(id => data.garments.some(item => item.id === id)) }));
+      setResult({ outfits: [], warnings: [] }); setHasGenerated(false); setInvalidatedOutfitIds(new Set());
+      seenSignatures.current.clear(); appliedRevision.current = revision.current; setDirty(false);
+    }
+  }, [entryKey, initialDraft, initialLockedIds, data.garments]);
   useEffect(() => {
     if (previousWardrobeKey.current === wardrobeKey) return;
     previousWardrobeKey.current = wardrobeKey;
-    const availableIds = new Set(data.garments.map(item => item.id));
-    setOptions(previous => ({ ...previous, lockedIds: previous.lockedIds.filter(id => availableIds.has(id)) }));
-    setResult(previous => ({ ...previous, outfits: previous.outfits.filter(outfit => outfit.garmentIds.every(id => availableIds.has(id))) }));
+    const ids = new Set(data.garments.map(item => item.id));
+    setOptions(previous => ({ ...previous, lockedIds: previous.lockedIds.filter(id => ids.has(id)) }));
+    setResult(previous => ({ ...previous, outfits: previous.outfits.filter(outfit => outfit.garmentIds.every(id => ids.has(id))) }));
     invalidateResults();
   }, [wardrobeKey, data.garments]);
 
   function updateOption<K extends keyof GenerateOptions>(key: K, value: GenerateOptions[K]) {
-    setOptions(previous => ({ ...previous, [key]: value }));
-    invalidateResults();
+    if (JSON.stringify(options[key]) === JSON.stringify(value)) return;
+    setOptions(previous => ({ ...previous, [key]: value })); invalidateResults();
   }
-
-  function toggleLock(id: string) {
-    updateOption('lockedIds', options.lockedIds.includes(id) ? options.lockedIds.filter(item => item !== id) : [...options.lockedIds, id]);
-  }
-
-  function generate() {
-    if (busy || generationTimer.current !== null) return;
+  function generate(more = false) {
+    if (busy || pendingId || generationFrame.current !== null) return;
     const requestedRevision = revision.current;
     const requestedSource = sourceKey;
-    setBusy(true);
-    generationTimer.current = setTimeout(() => {
-      generationTimer.current = null;
+    const continueSeen = more && !needsUpdate;
+    setBusy(true); setReplacement(null);
+    // The next paint can display the honest busy state; there is no decorative timer.
+    generationFrame.current = requestAnimationFrame(() => {
+      generationFrame.current = null;
       if (requestedRevision !== revision.current || requestedSource !== latestSourceKey.current) { setBusy(false); setDirty(true); return; }
-      const next = generateOutfits(data.garments, data.preferences, options, 3);
-      if (!dirty && result.outfits.length) {
-        const existing = new Set(result.outfits.map(item => outfitSignature(item.garmentIds)));
-        const candidates = generateOutfits(data.garments, data.preferences, { ...options, avoidIds: result.outfits[0].garmentIds }, 20).outfits;
-        const novel = candidates.filter(item => !existing.has(outfitSignature(item.garmentIds))).slice(0, 3);
-        next.outfits = [...novel, ...next.outfits.filter(item => !novel.some(other => outfitSignature(other.garmentIds) === outfitSignature(item.garmentIds)))].slice(0, 3);
-        if (!novel.length) notify('Hai già visto gli abbinamenti disponibili. Aggiungi capi o modifica le preferenze per nuove idee.');
-      }
-      if (next.outfits.length) next.warnings = [...next.warnings.filter(warning => warning.startsWith('Con questi capi e blocchi')), ...outfitWarnings(next.outfits, data.garments, data.preferences, options)];
-      setResult(next);
-      appliedRevision.current = requestedRevision;
-      setDirty(false);
-      setBusy(false);
-      setPreferencesOpen(false);
-      revealResults.current = true;
-    }, data.preferences.reduceMotion ? 0 : 260);
-  }
-
-  function regenerateOne(outfit: Outfit, preferences: Preferences = data.preferences, rejected = false) {
-    if (!canUseResults()) return;
-    const existing = new Set(result.outfits.map(item => outfitSignature(item.garmentIds)));
-    const replacement = generateOutfits(data.garments, preferences, { ...options, avoidIds: outfit.garmentIds }, 20).outfits.find(item => !existing.has(outfitSignature(item.garmentIds)) && !preferences.dislikedSignatures.includes(outfitSignature(item.garmentIds)));
-    if (!replacement) {
-      if (rejected) setResult(previous => {
-        const outfits = previous.outfits.filter(item => item.id !== outfit.id);
-        return { outfits, warnings: outfitWarnings(outfits, data.garments, preferences, options) };
+      const next = generateOutfits(latestData.current.garments, latestData.current.preferences, options, 3, continueSeen ? [...seenSignatures.current] : []);
+      if (continueSeen && !next.outfits.length) { setExhausted(true); setBusy(false); notify('Hai visto tutte le proposte disponibili.'); return; }
+      if (!continueSeen) seenSignatures.current.clear();
+      next.outfits.forEach(item => seenSignatures.current.add(outfitSignature(item.garmentIds)));
+      setResult(next); setHasGenerated(true); setInvalidatedOutfitIds(new Set()); appliedRevision.current = requestedRevision;
+      setDirty(false); setBusy(false); setEditing(false); setPreferencesOpen(false); setExhausted(false);
+      setCarouselReset(previous => previous + 1);
+      requestAnimationFrame(() => {
+        const heading = resultsHeadingRef.current;
+        if (!heading || !latestActive.current) return;
+        heading.focus({ preventScroll: true });
+        heading.scrollIntoView({ behavior: data.preferences.reduceMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
       });
-      notify(rejected ? 'Preferenza salvata. Non ci sono altre proposte compatibili: modifica i filtri per nuove idee.' : 'Hai già visto tutti gli abbinamenti disponibili con questi filtri. Prova a sbloccare un capo o cambiare stile.');
-      return;
-    }
-    const nextOutfit = replacement;
-    setResult(previous => {
-      const outfits = previous.outfits.map(item => item.id === outfit.id ? nextOutfit : item);
-      return { outfits, warnings: outfitWarnings(outfits, data.garments, preferences, options) };
     });
   }
-
-  function replaceOne(outfit: Outfit, garmentId: string) {
-    if (!canUseResults()) return;
-    const existing = new Set(result.outfits.filter(item => item.id !== outfit.id).map(item => outfitSignature(item.garmentIds)));
-    const protectedIds = new Set([...outfit.garmentIds, ...options.lockedIds]);
-    let pool = data.garments;
-    let next: Outfit | null = null;
-    while (pool.length) {
-      const candidate = replaceGarment(outfit, garmentId, pool, data.preferences, options);
-      if (!candidate) break;
-      const signature = outfitSignature(candidate.garmentIds);
-      if (!existing.has(signature) && !data.preferences.dislikedSignatures.includes(signature)) { next = candidate; break; }
-      // Retry without only this new candidate; keep the current outfit and every lock intact.
-      const rejectedCandidateId = candidate.garmentIds.find(id => !protectedIds.has(id));
-      if (!rejectedCandidateId) break;
-      pool = pool.filter(item => item.id !== rejectedCandidateId);
-    }
-    if (!next) { notify('Non ci sono altri capi compatibili per una proposta diversa. Prova a cambiare i filtri.'); return; }
-    const replacement = { ...next, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+  function changeOne(outfit: Outfit, preferences: Preferences = latestData.current.preferences, rejected = false) {
+    const next = generateOutfits(latestData.current.garments, preferences, { ...options, avoidIds: outfit.garmentIds }, 1, [...seenSignatures.current]).outfits[0];
+    if (!next && !rejected) { setExhausted(true); notify('Hai visto tutte le proposte disponibili.'); return; }
+    if (next) seenSignatures.current.add(outfitSignature(next.garmentIds));
     setResult(previous => {
-      const outfits = previous.outfits.map(item => item.id === outfit.id ? replacement : item);
+      const outfits = previous.outfits.flatMap(item => item.id === outfit.id ? next ? [next] : [] : [item]);
+      return { outfits, warnings: outfitWarnings(outfits, latestData.current.garments, preferences, options) };
+    });
+    if (!next) setExhausted(true);
+  }
+  async function rejectOne(outfit: Outfit) {
+    if (!canUse(outfit)) throw new Error('Stale outfit');
+    const requestedSource = sourceKey;
+    const requestedRevision = revision.current;
+    await onReject(outfit);
+    // Persistence must finish first. A changed context cannot install an old replacement.
+    if (requestedSource !== latestSourceKey.current || requestedRevision !== revision.current) return;
+    const signature = outfitSignature(outfit.garmentIds);
+    const preferences = latestData.current.preferences;
+    changeOne(outfit, { ...preferences, dislikedSignatures: [...new Set([...preferences.dislikedSignatures, signature])], likedSignatures: preferences.likedSignatures.filter(item => item !== signature) }, true);
+    notify('Preferenza salvata.');
+  }
+  function toggleSheetLock(id: string) {
+    if (!replacement || !canUse(result.outfits.find(item => item.id === replacement.outfitId))) return;
+    const lockedIds = options.lockedIds.includes(id) ? options.lockedIds.filter(item => item !== id) : [...options.lockedIds, id];
+    setOptions(previous => ({ ...previous, lockedIds }));
+    setInvalidatedOutfitIds(previous => new Set([...previous, ...result.outfits.filter(outfit => lockedIds.some(locked => !outfit.garmentIds.includes(locked))).map(outfit => outfit.id)]));
+    // The visible look remains valid; cards lacking a new lock are individually disabled.
+    revision.current += 1; appliedRevision.current = revision.current;
+    setExhausted(false);
+  }
+  function applyReplacement(next: Outfit) {
+    if (!replacement) return;
+    const original = result.outfits.find(item => item.id === replacement.outfitId);
+    if (!original || !canUse(original)) return;
+    seenSignatures.current.add(outfitSignature(next.garmentIds));
+    setResult(previous => {
+      const outfits = previous.outfits.map(item => item.id === original.id ? next : item);
       return { outfits, warnings: outfitWarnings(outfits, data.garments, data.preferences, options) };
     });
+    setReplacement(null); setExhausted(false);
   }
-
-  function rejectOne(outfit: Outfit) {
-    if (!canUseResults()) return;
-    const signature = outfitSignature(outfit.garmentIds);
-    const preferences: Preferences = { ...data.preferences, dislikedSignatures: [...new Set([...data.preferences.dislikedSignatures, signature])], likedSignatures: data.preferences.likedSignatures.filter(item => item !== signature) };
-    onReject(outfit);
-    regenerateOne(outfit, preferences, true);
-  }
-
-  const filteredGarments = data.garments.filter(item => `${item.name} ${item.category} ${item.color}`.toLocaleLowerCase('it').includes(query.toLocaleLowerCase('it')));
-  const lockedGarments = options.lockedIds.map(id => data.garments.find(item => item.id === id)).filter(Boolean);
+  const lockedGarments = options.lockedIds.map(id => data.garments.find(item => item.id === id)).filter((item): item is Garment => Boolean(item));
   const savedSignatures = new Set(data.outfits.filter(item => item.favorite).map(item => outfitSignature(item.garmentIds)));
+  const replacingOutfit = result.outfits.find(item => item.id === replacement?.outfitId);
+  const summary = `${options.style} · ${options.temperature} °C · ${options.weather} · ${options.season}`;
+  const warnings = result.outfits.length ? outfitWarnings(result.outfits, data.garments, data.preferences, options) : result.warnings;
 
   return <div className="page create-page">
-    <div className="page-heading create-page-heading"><div><span className="eyebrow">IL TUO STYLIST QUOTIDIANO</span><h1>Un buon outfit.<br className="create-heading-break" /> Una cosa in meno.</h1><p>Dimmi che giornata hai in mente. Al resto pensiamo insieme.</p></div><div className="create-heading-symbol" aria-hidden="true"><WandSparkles size={29} strokeWidth={1.3} /></div></div>
-    <div className="create-workspace">
-      <aside className="create-controls" aria-label="Preferenze outfit">
-        <button type="button" className="create-context-summary" aria-expanded={preferencesOpen} aria-controls={preferencesId} onClick={() => setPreferencesOpen(open => !open)}><span className="create-context-icon"><SlidersHorizontal size={19} /></span><span className="create-context-copy"><strong>{options.occasion}</strong><span>{options.style} · {options.temperature}° · {options.weather}{options.lockedIds.length > 0 && ` · ${options.lockedIds.length} bloccati`}</span><small>{preferencesOpen ? 'Chiudi preferenze' : 'Personalizza la tua giornata'}</small></span><ChevronDown size={18} className={preferencesOpen ? 'is-expanded' : ''} /></button>
-        <div id={preferencesId} className={`create-preferences${preferencesOpen ? ' is-open' : ''}`}>
-        <div className="create-control-heading"><span className="create-step">01</span><div><h2>La tua giornata</h2><p>Il contesto fa la differenza.</p></div></div>
-        <label className="field">Dove si va?<select className="input" value={options.occasion} onChange={event => updateOption('occasion', event.target.value)}>{OCCASIONS.map(occasion => <option key={occasion}>{occasion}</option>)}</select></label>
-        <div className="field"><span>Il tuo mood</span><div className="create-style-options">{(['Qualsiasi', ...STYLES] as const).map(style => <button type="button" key={style} className={`create-style-chip${options.style === style ? ' is-selected' : ''}`} onClick={() => updateOption('style', style as Style | 'Qualsiasi')} aria-pressed={options.style === style}>{style}</button>)}</div></div>
-        <div className="create-weather-top"><span><Thermometer size={14} /> Temperatura</span><strong>{options.temperature}°<span>C</span></strong></div>
-        <input className="create-temperature" type="range" min="-5" max="40" value={options.temperature} onChange={event => updateOption('temperature', Number(event.target.value))} aria-label="Temperatura in gradi Celsius" aria-valuetext={`${options.temperature} gradi Celsius`} />
-        <div className="create-weather-options">{([{ label: 'Sereno', Icon: Sun }, { label: 'Nuvoloso', Icon: Cloud }, { label: 'Pioggia', Icon: CloudRain }] as const).map(({ label, Icon }) => <button type="button" key={label} className={options.weather === label ? 'is-selected' : ''} onClick={() => updateOption('weather', label)} aria-pressed={options.weather === label}><Icon size={16} /><span>{label}</span></button>)}</div>
-        <div className="create-select-row"><label className="field">Stagione<select className="input" value={options.season} onChange={event => updateOption('season', event.target.value as Season)}>{SEASONS.map(season => <option key={season}>{season}</option>)}</select></label><label className="field">Formalità<select className="input" value={options.formality} onChange={event => updateOption('formality', Number(event.target.value))}><option value={1}>Rilassato</option><option value={2}>Casual</option><option value={3}>Curato</option><option value={4}>Elegante</option><option value={5}>Formale</option></select></label></div>
-        <div className="create-lock-section"><div className="create-lock-title"><LockKeyhole size={15} /><h3>Parti da un capo</h3><span>Opzionale</span></div><p>Le tue sneakers del cuore? Bloccale qui.</p>
-          {lockedGarments.length > 0 && <div className="create-locked-items">{lockedGarments.map(item => item && <div className="create-locked-item" key={item.id}><div className="create-lock-thumbnail"><GarmentArt garment={item} /></div><span>{item.name}</span><button type="button" onClick={() => toggleLock(item.id)} aria-label={`Sblocca ${item.name}`}><X size={14} /></button></div>)}</div>}
-          <button type="button" className="create-add-lock" onClick={() => setLockPicker(true)}><LockKeyhole size={14} />{lockedGarments.length ? 'Aggiungi un altro capo' : 'Scegli dal guardaroba'}<ArrowRight size={14} /></button>
+    <div className="page-heading create-page-heading"><h1>Crea</h1></div>
+    <div className={`create-workspace${hasGenerated && !editing ? ' is-results-focused' : ''}`}>
+      {(!hasGenerated || editing) ? <section className="create-controls" aria-label="Preferenze outfit">
+        <fieldset className="create-occasion-fieldset"><legend>Dove vai?</legend><div className="create-occasion-options">{QUICK_OCCASIONS.map(occasion => <button type="button" key={occasion} className={`create-style-chip${options.occasion === occasion ? ' is-selected' : ''}`} aria-pressed={options.occasion === occasion} onClick={() => { updateOption('occasion', occasion); setMoreOccasionsOpen(false); }}>{occasionLabel(occasion)}</button>)}<button type="button" className={`create-style-chip${OTHER_OCCASIONS.includes(options.occasion) ? ' is-selected' : ''}`} aria-expanded={moreOccasionsOpen} aria-controls={otherId} onClick={() => setMoreOccasionsOpen(open => !open)}>{OTHER_OCCASIONS.includes(options.occasion) ? options.occasion : 'Altro'} <ChevronDown size={15} /></button></div>{moreOccasionsOpen && <div id={otherId} className="create-occasion-options create-other-occasions">{OTHER_OCCASIONS.map(occasion => <button type="button" className={`create-style-chip${options.occasion === occasion ? ' is-selected' : ''}`} key={occasion} aria-pressed={options.occasion === occasion} onClick={() => { updateOption('occasion', occasion); setMoreOccasionsOpen(false); }}>{occasion}</button>)}</div>}</fieldset>
+        <div className="create-lock-section"><div className="create-lock-title"><h2>Parti da un capo?</h2><span>Facoltativo</span></div>
+          {lockedGarments.length > 0 && <div className="create-locked-items">{lockedGarments.map(item => <div className="create-locked-item" key={item.id}><div className="create-lock-thumbnail" aria-hidden="true"><GarmentArt garment={item} /></div><span>{item.name}<small><LockKeyhole size={12} aria-hidden="true" /> Bloccato</small></span><button type="button" className="outfit-icon-button" onClick={() => updateOption('lockedIds', options.lockedIds.filter(id => id !== item.id))} aria-label={`Sblocca ${item.name}`}><X size={18} /></button></div>)}</div>}
+          <button type="button" className="create-add-lock" onClick={() => setLockPicker(true)}>{lockedGarments.length ? 'Aggiungi un altro capo' : 'Scegli dal guardaroba'}</button>{lockedGarments.length > 1 && <button type="button" className="button button-ghost" onClick={() => updateOption('lockedIds', [])}>Sblocca tutti</button>}
         </div>
+        <div className="create-advanced"><button type="button" className="create-advanced-toggle" aria-expanded={preferencesOpen} aria-controls={preferencesId} onClick={() => setPreferencesOpen(open => !open)}>Altre preferenze<ChevronDown size={18} /></button><p className="create-effective-summary">{summary}</p>
+          {preferencesOpen && <div id={preferencesId} className="create-preferences"><label className="field">Stile<select className="input" value={options.style} onChange={event => updateOption('style', event.target.value as Style | 'Qualsiasi')}><option>Qualsiasi</option>{STYLES.map(style => <option key={style}>{style}</option>)}</select></label><label className="field">Temperatura · {options.temperature} °C<input className="create-temperature" type="range" min="-5" max="40" value={options.temperature} onChange={event => updateOption('temperature', Number(event.target.value))} aria-valuetext={`${options.temperature} gradi Celsius`} /></label><label className="field">Meteo<select className="input" value={options.weather} onChange={event => updateOption('weather', event.target.value as GenerateOptions['weather'])}><option>Sereno</option><option>Nuvoloso</option><option>Pioggia</option></select></label><div className="create-select-row"><label className="field">Stagione<select className="input" value={options.season} onChange={event => updateOption('season', event.target.value as Season)}>{SEASONS.map(season => <option key={season}>{season}</option>)}</select></label><label className="field">Formalità<select className="input" value={options.formality} onChange={event => updateOption('formality', Number(event.target.value))}><option value={1}>Rilassato</option><option value={2}>Casual</option><option value={3}>Curato</option><option value={4}>Elegante</option><option value={5}>Formale</option></select></label></div><p className="create-weather-note">Temperatura e meteo sono impostati da te.</p></div>}
         </div>
-        <button type="button" className="button button-primary create-generate-button" onClick={generate} disabled={busy || !data.garments.length}><Sparkles size={17} className={busy ? 'create-spin' : ''} />{busy ? 'Trovo i tuoi abbinamenti…' : 'Genera i miei outfit'}{!busy && <ArrowRight size={17} />}</button>
-        <p className="create-local-note">Solo i tuoi capi. Nuove possibilità.</p>
-      </aside>
-      <section className={`create-results${busy ? ' is-generating' : ''}`} aria-label="Outfit suggeriti" aria-busy={busy}>
-        <div className="create-results-heading"><div><span className="eyebrow">IL BELLO È GIÀ NEL TUO ARMADIO</span><h2 ref={resultsHeadingRef} tabIndex={-1}>{result.outfits.length ? `${result.outfits.length} ${result.outfits.length === 1 ? 'possibilità, tutta tua' : 'possibilità, tutte tue'}` : 'Il prossimo outfit parte da qui'}</h2></div>{resultsStale ? <span className="create-dirty-label">Preferenze aggiornate</span> : <span className="create-results-label"><span /> Scelti per te</span>}</div>
-        {resultsStale && <div className="create-warnings" role="status"><Info size={16} /><div><p>Rigenera per applicare le preferenze e i capi bloccati. Le proposte precedenti non sono ancora aggiornate.</p><button type="button" className="button button-ghost" onClick={generate} disabled={busy || !data.garments.length}><Sparkles size={15} />{busy ? 'Aggiornamento…' : 'Rigenera le proposte'}</button></div></div>}
-        {!resultsStale && result.warnings.length > 0 && <div className="create-warnings" role="status"><Info size={16} /><div>{result.warnings.map(warning => <p key={warning}>{warning}</p>)}</div></div>}
-        {result.outfits.length > 0 ? <div className="create-outfits-grid">{result.outfits.map(outfit => <OutfitCard key={outfit.id} outfit={{ ...outfit, favorite: savedSignatures.has(outfitSignature(outfit.garmentIds)) }} garments={data.garments} onSave={resultsStale || busy ? undefined : item => { if (canUseResults()) onSave(item); }} onWear={resultsStale || busy ? undefined : item => { if (canUseResults()) onWear(item); }} onReplace={resultsStale || busy ? undefined : id => replaceOne(outfit, id)} onRegenerate={resultsStale || busy ? undefined : () => regenerateOne(outfit)} onReject={resultsStale || busy ? undefined : rejectOne} lockedIds={options.lockedIds} onToggleLock={toggleLock} />)}</div> : <div className="create-empty"><div className="create-empty-icon"><Sparkles size={32} strokeWidth={1.3} /></div><h3>Facciamo spazio alle idee.</h3><p>Per un outfit completo servono almeno un top, un pantalone e un paio di scarpe compatibili. Aggiungili al guardaroba, oppure modifica i filtri e i capi bloccati.</p></div>}
-        <div className="create-bottom-note"><Sparkles size={15} /><p>Gli abbinamenti considerano colori, stagione, stile e le tue preferenze.<br />Salva quelli che ami: le prossime proposte ti somiglieranno di più.</p></div>
-      </section>
+        <button type="button" className="button button-primary create-generate-button" onClick={() => generate()} disabled={busy || Boolean(pendingId) || !data.garments.length}>{busy ? 'Cerco un outfit…' : hasGenerated ? 'Aggiorna outfit' : 'Mostrami un outfit'}</button>
+        {!data.garments.length && <div className="create-empty"><p>Per un outfit completo servono un capo superiore, un pantalone e un paio di scarpe.</p>{onUpload && <button type="button" className="button" onClick={onUpload}>Aggiungi capo</button>}</div>}
+      </section> : <div className="create-context-summary"><div><strong>{occasionLabel(options.occasion)}{lockedGarments.length > 0 && ` · ${lockedGarments.map(item => item.name).join(', ')}`}</strong><p>{summary}</p></div><button type="button" className="button button-ghost" onClick={() => setEditing(true)}>Modifica</button></div>}
+      {hasGenerated && <section className="create-results" aria-label="Outfit suggeriti" aria-busy={busy}>
+        <div className="create-results-heading"><h2 ref={resultsHeadingRef} tabIndex={-1}>{result.outfits.length === 1 ? '1 proposta' : `${result.outfits.length} proposte`}</h2></div>
+        {needsUpdate && <div className="create-warnings" role="status"><p>Le proposte vanno aggiornate.</p><button type="button" className="button" onClick={() => generate()} disabled={busy || Boolean(pendingId)}>{busy ? 'Cerco un outfit…' : 'Aggiorna outfit'}</button></div>}
+        {!resultsStale && warnings.length > 0 && <div className="create-warnings" role="status">{warnings.map(warning => <p key={warning}>{warning}</p>)}</div>}
+        {result.outfits.length ? <OutfitCarousel resetKey={carouselReset} disabled={busy || Boolean(pendingId)} reduceMotion={data.preferences.reduceMotion} onMore={needsUpdate ? undefined : () => generate(true)}>{result.outfits.map((outfit, index) => <OutfitCard key={index} outfit={{ ...outfit, favorite: savedSignatures.has(outfitSignature(outfit.garmentIds)) }} garments={data.garments} disabled={busy || resultsStale || invalidated(outfit) || (pendingId !== null && pendingId !== outfit.id)} onSave={async item => { if (!canUse(item)) throw new Error('Stale outfit'); await onSave(item); }} onWear={async item => { if (!canUse(item)) throw new Error('Stale outfit'); return await onWear(item); }} onReplace={id => { if (canUse(outfit)) setReplacement({ outfitId: outfit.id, garmentId: id }); }} onRegenerate={() => { if (canUse(outfit)) changeOne(outfit); }} onReject={rejectOne} lockedIds={options.lockedIds} onBusyChange={isBusy => setPendingId(isBusy ? outfit.id : null)} />)}</OutfitCarousel> : <div className="create-empty"><h3>Nessun outfit con queste preferenze.</h3><button type="button" className="button" onClick={() => setEditing(true)}>Modifica preferenze</button>{onUpload && <button type="button" className="button button-ghost" onClick={onUpload}>Aggiungi capo</button>}</div>}
+        {exhausted && <p className="create-exhausted" role="status">Hai visto tutte le proposte disponibili.</p>}
+      </section>}
     </div>
-    {lockPicker && <div className="create-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) setLockPicker(false); }}><div ref={modalRef} className="create-lock-modal" tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="lock-modal-title"><div className="create-lock-modal-header"><div><span className="eyebrow">OUTFIT LOCK</span><h2 id="lock-modal-title">Quel capo, assolutamente.</h2><p>Scegli uno o più capi. Costruiamo l’outfit attorno a loro.</p></div><button type="button" className="outfit-icon-button" onClick={() => setLockPicker(false)} aria-label="Chiudi selezione capi"><X size={20} /></button></div><div className="create-lock-search"><Search size={17} /><input className="input" value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca un capo, un colore…" aria-label="Cerca un capo da bloccare" /></div><div className="create-lock-grid">{filteredGarments.map(item => <button type="button" key={item.id} className={`create-lock-choice${options.lockedIds.includes(item.id) ? ' is-selected' : ''}`} onClick={() => toggleLock(item.id)} aria-pressed={options.lockedIds.includes(item.id)}><div className="create-lock-choice-art"><GarmentArt garment={item} />{options.lockedIds.includes(item.id) && <span><Check size={14} /></span>}</div><strong>{item.name}</strong><small>{item.category} · {item.color}</small></button>)}{!filteredGarments.length && <p className="create-lock-no-results">Nessun capo trovato. Prova un’altra ricerca.</p>}</div><div className="create-lock-modal-footer"><button type="button" className="button button-ghost" onClick={() => updateOption('lockedIds', [])} disabled={!options.lockedIds.length}><UnlockKeyhole size={15} />Sblocca tutti</button><button type="button" className="button button-primary" onClick={() => setLockPicker(false)}>Conferma{options.lockedIds.length > 0 && ` (${options.lockedIds.length})`}<Check size={16} /></button></div></div></div>}
+    {active && lockPicker && <GarmentPickerSheet garments={data.garments} lockedIds={options.lockedIds} onClose={() => setLockPicker(false)} onConfirm={ids => { updateOption('lockedIds', ids); setLockPicker(false); }} />}
+    {active && replacement && replacingOutfit && !resultsStale && <ReplacementSheet outfit={replacingOutfit} garmentId={replacement.garmentId} garments={data.garments} preferences={data.preferences} options={options} excludedSignatures={result.outfits.filter(item => item.id !== replacingOutfit.id).map(item => outfitSignature(item.garmentIds))} onApply={applyReplacement} onClose={() => setReplacement(null)} onToggleLock={toggleSheetLock} onDetails={onDetails} onUpload={onUpload} onPreferences={() => setEditing(true)} />}
   </div>;
 }

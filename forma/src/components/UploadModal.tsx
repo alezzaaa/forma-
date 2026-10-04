@@ -1,12 +1,15 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Camera, Check, ImagePlus, LoaderCircle, Plus, RotateCcw, ScanLine, Sparkles, UploadCloud, X } from 'lucide-react';
-import type { Garment } from '../types';
+import { ArrowLeft, ArrowRight, Camera, Check, ImagePlus, LoaderCircle, Plus, RotateCcw, ScanLine, Eraser, Pencil, UploadCloud, X } from 'lucide-react';
+import type { Category, Garment } from '../types';
+import { SEASONS } from '../lib/constants';
+import { garmentValidationIssue } from '../lib/wardrobe';
+import GarmentArt from './GarmentArt';
 import { LocalRecognitionProvider, MAX_UPLOAD_FILES, removeUniformBackground } from '../lib/recognition';
-import { GarmentFields, garmentValidation, useDialog } from './GarmentEditor';
+import { DiscardChangesDialog, focusGarmentError, GarmentFields, garmentValidation, useDialog } from './GarmentEditor';
 import './upload.css';
 
 type Draft = { garment: Garment; originalImage: string; needsCategory: boolean; backgroundRemoved: boolean };
-export default function UploadModal({ onClose, onSave }: { onClose: () => void; onSave: (items: Garment[]) => Promise<void> }) {
+export default function UploadModal({ onClose, onSave, initialCategory }: { onClose: () => void; onSave: (items: Garment[]) => Promise<void>; initialCategory?: Category }) {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [active, setActive] = useState(0);
   const [processing, setProcessing] = useState(false);
@@ -14,6 +17,9 @@ export default function UploadModal({ onClose, onSave }: { onClose: () => void; 
   const [removingBackground, setRemovingBackground] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState('');
+  const [showValidation, setShowValidation] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const savingRef = useRef(false);
   const [progress, setProgress] = useState({ filename: '', phase: '', percent: 0, index: 0, total: 0 });
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -21,7 +27,7 @@ export default function UploadModal({ onClose, onSave }: { onClose: () => void; 
   const processingRef = useRef(false);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const busy = processing || saving || removingBackground;
-  const close = () => { if (!saving && !removingBackground) onClose(); };
+  const close = () => { if (!savingRef.current && !removingBackground) { if (drafts.length || processing) setConfirmDiscard(true); else onClose(); } };
   const modalRef = useDialog(close);
   const titleId = useId();
   const draft = drafts[active];
@@ -45,7 +51,7 @@ export default function UploadModal({ onClose, onSave }: { onClose: () => void; 
       try {
         const result = await provider.analyze(file, status => { if (alive.current) setProgress({ ...status, filename: file.name, index: index + 1, total: selected.length }); });
         addedCount++;
-        if (alive.current) setDrafts(current => [...current, { garment: result.garment, originalImage: result.garment.image, needsCategory: !result.categoryDetected, backgroundRemoved: false }]);
+        if (alive.current) setDrafts(current => [...current, { garment: { ...result.garment, category: initialCategory ?? result.garment.category }, originalImage: result.garment.image, needsCategory: !initialCategory && !result.categoryDetected, backgroundRemoved: false }]);
       } catch (cause) { errors.push(`${file.name}: ${cause instanceof Error ? cause.message : 'La foto non è stata caricata.'}`); }
     }
     if (alive.current) { setProcessing(false); setError(errors.join('\n')); if (addedCount) setActive(firstNewIndex); }
@@ -53,14 +59,23 @@ export default function UploadModal({ onClose, onSave }: { onClose: () => void; 
     if (fileRef.current) fileRef.current.value = '';
     if (cameraRef.current) cameraRef.current.value = '';
   };
-  const updateDraft = (garment: Garment) => setDrafts(current => current.map((item, index) => index === active ? { ...item, garment } : item));
+  const addManual = () => {
+    if (busy || drafts.length >= MAX_UPLOAD_FILES) return;
+    const garment: Garment = { id: crypto.randomUUID(), name: 'Nuovo capo', category: initialCategory ?? 'T-shirt', subcategory: '', color: 'Grigio', colorHex: '#90918c', secondaryColors: [], style: 'Casual', seasons: [...SEASONS], formality: 2, material: '', pattern: 'Tinta unita', image: '', favorite: false, wearCount: 0, lastWorn: null, createdAt: new Date().toISOString(), demo: false };
+    setDrafts(current => [...current, { garment, originalImage: '', needsCategory: false, backgroundRemoved: false }]);
+    setActive(drafts.length); setError('');
+  };
+  const updateDraft = (garment: Garment) => {
+    setDrafts(current => current.map((item, index) => index === active ? { ...item, garment } : item));
+    setError('');
+  };
   const resolveCategory = () => setDrafts(current => current.map((item, index) => index === active ? { ...item, needsCategory: false } : item));
   const removeDraft = (index: number) => {
     setDrafts(current => current.filter((_, i) => i !== index));
     setActive(current => Math.max(0, current >= index ? current - 1 : current));
   };
   const removeBackground = async () => {
-    if (!draft) return;
+    if (!draft?.originalImage) return;
     if (draft.backgroundRemoved) { setDrafts(current => current.map((item, index) => index === active ? { ...item, garment: { ...item.garment, image: item.originalImage }, backgroundRemoved: false } : item)); return; }
     setRemovingBackground(true); setError('');
     try {
@@ -70,19 +85,23 @@ export default function UploadModal({ onClose, onSave }: { onClose: () => void; 
     finally { if (alive.current) setRemovingBackground(false); }
   };
   const save = async () => {
-    if (busy) return;
+    if (busy || savingRef.current) return;
     const invalidIndex = drafts.findIndex(item => garmentValidation(item.garment, item.needsCategory));
-    if (invalidIndex >= 0) { setActive(invalidIndex); setError(`Foto ${invalidIndex + 1}: ${garmentValidation(drafts[invalidIndex].garment, drafts[invalidIndex].needsCategory)}`); return; }
+    if (invalidIndex >= 0) {
+      const issue = garmentValidationIssue(drafts[invalidIndex].garment, drafts[invalidIndex].needsCategory)!;
+      setActive(invalidIndex); setShowValidation(true); setError(`Capo ${invalidIndex + 1}: ${issue.message}`);
+      focusGarmentError(modalRef.current, issue.field); return;
+    }
     if (!drafts.length) return;
-    setSaving(true); setError('');
+    savingRef.current = true; setSaving(true); setError('');
     try { await onSave(drafts.map(item => ({ ...item.garment, name: item.garment.name.trim() }))); onClose(); }
-    catch { setError('Non è stato possibile salvare i capi. Il tuo spazio potrebbe essere pieno: prova con meno foto.'); }
-    finally { if (alive.current) setSaving(false); }
+    catch { setError('Salvataggio non riuscito. Riprova.'); }
+    finally { savingRef.current = false; if (alive.current) setSaving(false); }
   };
   const changeActive = (index: number) => { if (!busy) { setActive(index); setError(''); } };
-  return <div className="modal-backdrop upload-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
-    <div className={`modal upload-modal ${drafts.length ? 'upload-has-drafts' : 'upload-empty'}`} role="dialog" aria-modal="true" aria-labelledby={titleId} ref={modalRef} tabIndex={-1}>
-      <header className="upload-header"><div><span className="upload-eyebrow">GET DRESSD · IL TUO GUARDAROBA</span><h2 id={titleId}>{drafts.length ? 'Fai spazio al tuo stile.' : 'Il tuo guardaroba inizia qui.'}</h2><p>{drafts.length ? 'Controlla i dettagli, poi lascia fare agli abbinamenti.' : 'Una foto per capo. Nuovi outfit, con quello che ami.'}</p></div><button type="button" className="upload-icon-button" aria-label="Chiudi caricamento" onClick={close} disabled={saving || removingBackground}><X size={21} /></button></header>
+  return <><div className="modal-backdrop upload-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
+    <div className={`modal upload-modal ${drafts.length ? 'upload-has-drafts' : 'upload-empty'}`} role="dialog" aria-modal="true" aria-labelledby={titleId} ref={modalRef} tabIndex={-1} aria-busy={busy}>
+      <header className="upload-header"><div><h2 id={titleId}>{drafts.length ? 'Controlla i capi' : 'Aggiungi capo'}</h2><p>Creiamo una bozza locale dalla foto. Controlla i dettagli prima di salvare.</p></div><button type="button" className="upload-icon-button" aria-label="Chiudi caricamento" onClick={close} disabled={saving || removingBackground}><X size={21} /></button></header>
       <input ref={fileRef} className="upload-hidden-input" type="file" accept="image/*" multiple aria-label="Scegli foto dei capi" onChange={e => { if (e.target.files) void addFiles(e.target.files); }} />
       <input ref={cameraRef} className="upload-hidden-input" type="file" accept="image/*" capture="environment" aria-label="Scatta foto di un capo" onChange={e => { if (e.target.files) void addFiles(e.target.files); }} />
       <div className="upload-scroll">
@@ -90,18 +109,18 @@ export default function UploadModal({ onClose, onSave }: { onClose: () => void; 
       {!drafts.length && <div className="upload-welcome">
         <button className={`upload-dropzone ${dragging ? 'dragging' : ''}`} disabled={processing} type="button" onClick={() => fileRef.current?.click()} onDragOver={event => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={event => { event.preventDefault(); setDragging(false); void addFiles(event.dataTransfer.files); }}><span className="upload-drop-art"><span /><ImagePlus size={40} strokeWidth={1.15} /></span><strong>{dragging ? 'Lascia qui le tue foto' : 'Aggiungi i tuoi capi'}</strong><span>Dalla galleria, oppure trascinali qui</span><span className="button button-primary"><Plus size={17} /> Scegli le foto</span><small>Fino a 20 foto · 12 MB per foto<br />HEIC se supportato dal browser · JPEG, PNG e WebP</small></button>
         <button type="button" className="button button-ghost upload-camera" disabled={processing} onClick={() => cameraRef.current?.click()}><Camera size={18} /> Scatta una foto</button>
-        <div className="upload-tips"><div><ScanLine size={18} /><span><b>Un capo alla volta</b><small>Stendilo su una superficie neutra.</small></span></div><div><Sparkles size={18} /><span><b>La luce fa la differenza</b><small>Usa luce naturale, senza filtri.</small></span></div></div>
+        <button type="button" className="button button-outline upload-manual" disabled={processing} onClick={addManual}><Pencil size={18} />Aggiungi senza foto</button>
         <p className="upload-local-note">Le foto restano su questo dispositivo. L’analisi locale propone il colore e usa il nome del file per suggerire la categoria; gli altri dettagli vanno verificati.</p>
       </div>}
       {!!drafts.length && <>
-        <div className="upload-queue" aria-label="Foto da aggiungere">{drafts.map((item, index) => <div className={`upload-queue-item ${index === active ? 'active' : ''}`} key={item.garment.id}><button type="button" disabled={busy} aria-label={`Modifica foto ${index + 1}: ${item.garment.name}${item.needsCategory ? ', scegli categoria' : ''}`} aria-pressed={index === active} onClick={() => changeActive(index)}><img src={item.garment.image} alt="" />{item.needsCategory && <span className="upload-queue-dot" />}</button><button type="button" className="upload-queue-remove" aria-label={`Rimuovi foto ${index + 1}`} disabled={busy} onClick={() => removeDraft(index)}><X size={11} /></button></div>)}{drafts.length < MAX_UPLOAD_FILES && <button type="button" className="upload-queue-add" aria-label="Aggiungi altre foto" disabled={busy} onClick={() => fileRef.current?.click()}><Plus size={20} /></button>}<span className="upload-queue-count">{drafts.length} {drafts.length === 1 ? 'capo' : 'capi'}</span></div>
+        <div className="upload-queue" aria-label="Capi da aggiungere">{drafts.map((item, index) => <div className={`upload-queue-item ${index === active ? 'active' : ''}`} key={item.garment.id}><button type="button" disabled={busy} aria-label={`Modifica capo ${index + 1}: ${item.garment.name}${item.needsCategory ? ', scegli categoria' : ''}`} aria-pressed={index === active} onClick={() => changeActive(index)}><GarmentArt garment={item.garment} />{item.needsCategory && <span className="upload-queue-dot" />}</button><button type="button" className="upload-queue-remove" aria-label={`Rimuovi capo ${index + 1}`} disabled={busy} onClick={() => removeDraft(index)}><X size={11} /></button></div>)}{drafts.length < MAX_UPLOAD_FILES && <button type="button" className="upload-queue-add" aria-label="Aggiungi altre foto" disabled={busy} onClick={() => fileRef.current?.click()}><Plus size={20} /></button>}<span className="upload-queue-count">{drafts.length} {drafts.length === 1 ? 'capo' : 'capi'}</span></div>
         {draft && <div className="upload-review">
-          <div className="upload-preview-column"><div className={`upload-photo ${draft.backgroundRemoved ? 'upload-transparent' : ''}`}><img src={draft.garment.image} alt={`Anteprima di ${draft.garment.name}`} />{removingBackground && <div className="upload-photo-busy"><LoaderCircle className="upload-spin" size={24} /><span>Rimozione sfondo…</span></div>}</div><button className="button button-ghost upload-background-button" type="button" onClick={removeBackground} disabled={busy}>{draft.backgroundRemoved ? <RotateCcw size={16} /> : <Sparkles size={16} />}{draft.backgroundRemoved ? 'Ripristina originale' : 'Rimuovi sfondo uniforme'}</button><p className="upload-background-hint">Funziona con fondi a tinta unita. Controlla i bordi: puoi sempre ripristinare l’originale.</p><div className="upload-draft-navigation"><button type="button" className="upload-icon-button" aria-label="Capo precedente" onClick={() => changeActive(active - 1)} disabled={active === 0 || busy}><ArrowLeft size={17} /></button><span>Capo {active + 1} di {drafts.length}</span><button type="button" className="upload-icon-button" aria-label="Capo successivo" onClick={() => changeActive(active + 1)} disabled={active === drafts.length - 1 || busy}><ArrowRight size={17} /></button></div></div>
-          <div className="upload-form-column"><div className="upload-draft-notice"><ScanLine size={16} /><span>Bozza automatica · verifica i dettagli</span></div><fieldset className="upload-edit-fields" disabled={busy}><GarmentFields garment={draft.garment} onChange={updateDraft} categoryRequired={draft.needsCategory} onCategoryResolved={resolveCategory} /></fieldset></div>
+          <div className="upload-preview-column"><div className={`upload-photo ${draft.backgroundRemoved ? 'upload-transparent' : ''}`}><GarmentArt garment={draft.garment} />{removingBackground && <div className="upload-photo-busy"><LoaderCircle className="upload-spin" size={24} /><span>Rimozione sfondo…</span></div>}</div>{draft.originalImage && <><button className="button button-ghost upload-background-button" type="button" onClick={removeBackground} disabled={busy}>{draft.backgroundRemoved ? <RotateCcw size={16} /> : <Eraser size={16} />}{draft.backgroundRemoved ? 'Ripristina originale' : 'Rimuovi sfondo uniforme'}</button><p className="upload-background-hint">Funziona con fondi a tinta unita. Controlla i bordi: puoi sempre ripristinare l’originale.</p></>}<div className="upload-draft-navigation"><button type="button" className="upload-icon-button" aria-label="Capo precedente" onClick={() => changeActive(active - 1)} disabled={active === 0 || busy}><ArrowLeft size={17} /></button><span>Capo {active + 1} di {drafts.length}</span><button type="button" className="upload-icon-button" aria-label="Capo successivo" onClick={() => changeActive(active + 1)} disabled={active === drafts.length - 1 || busy}><ArrowRight size={17} /></button></div></div>
+          <div className="upload-form-column"><div className="upload-draft-notice"><ScanLine size={16} /><span>Bozza locale · verifica i dettagli</span></div><fieldset className="upload-edit-fields" disabled={busy}><GarmentFields key={draft.garment.id} showValidation={showValidation} garment={draft.garment} onChange={updateDraft} categoryRequired={draft.needsCategory} onCategoryResolved={resolveCategory} /></fieldset></div>
         </div>}
       </>}
       </div>
-      {(drafts.length > 0 || error) && <footer className="upload-footer">{error && <p className="upload-error" role="alert">{error}</p>}{drafts.length > 0 && <div className="upload-footer-actions"><span className="upload-save-caption"><UploadCloud size={16} /> Solo nel tuo guardaroba</span><div><button type="button" className="button button-ghost" onClick={close} disabled={saving || removingBackground}>Annulla</button><button type="button" className="button button-primary" onClick={save} disabled={busy}>{saving ? <LoaderCircle size={17} className="upload-spin" /> : <Check size={17} />}{saving ? 'Salvataggio…' : `Aggiungi ${drafts.length === 1 ? 'al guardaroba' : `${drafts.length} capi`}`}</button></div></div>}</footer>}
+      {(drafts.length > 0 || error) && <footer className="upload-footer">{error && <p className="upload-error" role="alert">{error}</p>}{drafts.length > 0 && <div className="upload-footer-actions"><span className="upload-save-caption"><UploadCloud size={16} /> Solo nel tuo guardaroba</span><div><button type="button" className="button button-ghost" onClick={close} disabled={saving || removingBackground}>Annulla</button><button type="button" className="button button-primary" onClick={save} disabled={busy}>{saving ? <LoaderCircle size={17} className="upload-spin" /> : <Check size={17} />}{saving ? 'Salvo…' : `Aggiungi ${drafts.length} ${drafts.length === 1 ? 'capo' : 'capi'}`}</button></div></div>}</footer>}
     </div>
-  </div>;
+  </div>{confirmDiscard && <DiscardChangesDialog onCancel={() => setConfirmDiscard(false)} onDiscard={onClose} />}</>;
 }

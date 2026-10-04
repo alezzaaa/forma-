@@ -4,7 +4,7 @@
 
 Una web app in italiano per organizzare i vestiti, comporre outfit e rispondere a «Cosa mi metto oggi?». Interfaccia scura, navigazione per desktop e smartphone, foto personali e salvataggio locale. È un MVP funzionante: non richiede un account né chiavi API.
 
-**Versione 1.1.0:** nuovo nome e icona, widget Statistiche nel profilo, navigazione e schermate ottimizzate per iPhone. La cartella del progetto resta `forma` per mantenere compatibile la pubblicazione esistente. L'archivio del browser e il formato dei backup rimangono compatibili con la versione precedente.
+**Versione 1.2.0:** Oggi con un outfit immediato, quattro tab, sostituzione dei capi dal collage, carosello mobile, filtri e dettaglio guardaroba, editor essenziale e Profilo con attività e gestione dati. La cartella del progetto resta `forma` per mantenere compatibile la pubblicazione esistente. L'archivio del browser e il formato dei backup rimangono compatibili con la versione precedente.
 
 Per aggiornare il sito GitHub Pages già pubblicato, segui [AGGIORNAMENTO.md](AGGIORNAMENTO.md).
 
@@ -32,15 +32,17 @@ Non è inclusa una pubblicazione online: `localhost` funziona sul computer che e
 
 Apri l'indirizzo pubblicato in **Safari**. Per avere GET DRESSD nella Home, apri il menu di condivisione, scegli **Aggiungi alla schermata Home** e conferma. Se Safari mostra l'opzione **Apri come app web**, lasciala attiva. Le istruzioni aggiornate sono nella [guida Apple](https://support.apple.com/it-it/guide/iphone/iphea86e5236/ios).
 
-L'app include icona, nome e visualizzazione autonoma, spazi per notch e indicatore Home, barra di navigazione inferiore, campi di testo più leggibili e controlli adatti al tocco. In **Tu** trovi statistiche, preferenze, backup e accesso alla cronologia. Il sito pubblicato richiede una connessione per il caricamento iniziale: non è incluso un service worker per l'avvio offline. La copia HTML autonoma resta una modalità separata, consigliata soprattutto su desktop.
+L'app include icona, nome e visualizzazione autonoma, spazi per notch e indicatore Home, barra di navigazione inferiore, campi di testo più leggibili e controlli adatti al tocco. Nell’avatar **Profilo** trovi statistiche, preferenze, backup e accesso alla cronologia. Il sito pubblicato richiede una connessione per il caricamento iniziale: non è incluso un service worker per l'avvio offline. La copia HTML autonoma resta una modalità separata, consigliata soprattutto su desktop.
 
 ## Il primo outfit
 
-1. Esplora i **22 capi dimostrativi** e le combinazioni già presenti.
-2. Apri **Crea outfit** e scegli occasione, stile, temperatura, meteo e formalità.
-3. Se vuoi partire da una scarpa o da un altro capo, aggiungilo ai **capi bloccati**. Puoi bloccarne più di uno, purché i ruoli siano compatibili.
-4. Genera fino a **3 proposte distinte**. Puoi cambiare un singolo capo, rigenerare, esprimere una preferenza o salvare il look.
-5. Premi **Indosso questo**: l'app aggiorna cronologia, utilizzi e suggerimenti successivi.
+1. Apri **Oggi**: il look è già pronto. I capi di esempio sono dichiarati come tali.
+2. Premi **Indosso questo** per registrare esattamente i capi visibili, una volta per combinazione e giorno locale.
+3. **Cambia** propone altre combinazioni nello stesso spazio. Tocca un capo, scegli un candidato e conferma con **Usa questo capo**.
+4. Per un contesto diverso apri **Crea**, scegli l’occasione ed eventualmente un capo di partenza, poi **Mostrami un outfit**.
+5. Scorri le proposte o usa **Precedente / Successivo**; salva volontariamente quelle da conservare in **Salvati**.
+
+Temperatura e meteo sono impostazioni manuali sotto **Altre preferenze**. Cambiare contesto rende le vecchie proposte da aggiornare; i pulsanti diventano disponibili dopo una nuova generazione.
 
 Le proposte usano esclusivamente i capi presenti nel guardaroba. Se mancano categorie necessarie o combinazioni sufficienti, l'app lo segnala. Non inventa vestiti per completare una proposta.
 
@@ -55,26 +57,26 @@ In **Guardaroba**, usa il pulsante per aggiungere un capo: scegli le foto dalla 
 
 Il riconoscimento locale non è un modello visivo AI: per la categoria usa indizi nel nome del file, se presenti, mentre i colori vengono stimati dai pixel. Per esempio, `camicia-azzurra.jpg` aiuta più di `IMG_1234.jpg`. I materiali non vengono riconosciuti automaticamente. L'app dichiara queste informazioni come bozze da verificare.
 
-Per passare al tuo guardaroba personale, apri il profilo **Il tuo spazio → Rimuovi capi demo**. Verranno eliminate anche le combinazioni e la cronologia legate alla demo; i capi personali restano disponibili.
+Per passare al tuo guardaroba personale, apri il profilo **Profilo → Privacy e dati → Rimuovi capi di esempio**. Verranno eliminate anche le combinazioni e la cronologia legate alla demo; i capi personali restano disponibili.
 
 ## Le sezioni
 
 | Sezione | Cosa puoi fare |
 | --- | --- |
-| Home | Vedere un suggerimento, gli ultimi capi e le statistiche rapide. |
-| Guardaroba | Cercare, filtrare, modificare, segnare preferiti e bloccare un capo per un outfit. |
-| Crea outfit | Impostare il contesto, confrontare proposte e sostituire singoli elementi. |
-| I tuoi outfit | Conservare i look, assegnare nome e voto, aggiungere note e registrare utilizzi. |
-| Cronologia | Consultare i look indossati e le statistiche su capi e colori. |
-| Il tuo spazio / Tu | Consultare Statistiche, scegliere preferenze, ridurre le animazioni e gestire backup e dati. |
+| Oggi | Indossare il look visibile, cambiarlo, partire da un capo e continuare il guardaroba. |
+| Guardaroba | Cercare, applicare/annullare filtri, aprire un dettaglio, aggiungere e modificare capi. |
+| Crea | Scegliere contesto e blocchi, generare e scorrere proposte, sostituire un capo. |
+| Salvati | Vedere soltanto gli outfit salvati volontariamente, indossarli e creare varianti. |
+| Cronologia | Consultare gli eventi in ordine cronologico locale, anche dopo la cancellazione di un outfit. |
+| Profilo | Aprire Statistiche, Cronologia, Preferenze, Backup, Installa app e Privacy e dati. |
 
 Il motore combina regole su colori, ruoli, stile, stagione e formalità con preferiti, combinazioni apprezzate/rifiutate e utilizzo recente. È un sistema euristico personalizzato; non addestra un modello AI sul tuo profilo.
 
 ## Statistiche personali
 
-Il widget **Statistiche** nel profilo mostra capi preferiti, utilizzi, colori e distribuzione del guardaroba. Puoi scegliere **30 giorni** oppure **Sempre**: le metriche di utilizzo vengono calcolate dalla cronologia, mentre dimensioni e composizione descrivono il guardaroba attuale. Un capo viene indicato come preferito solo quando lo hai segnato con il cuore.
+La vista **Statistiche** nel Profilo mostra il capo più indossato, rotazione, outfit indossati, capi non indossati nel periodo e colori. Le altre metriche sono in **Vedi tutte le statistiche**. Puoi scegliere **30 giorni** oppure **Sempre**: le metriche di utilizzo vengono calcolate dalla cronologia, mentre dimensioni e composizione descrivono il guardaroba attuale. Un capo viene indicato come preferito solo quando lo hai segnato con il cuore.
 
-Il confronto con amici è previsto come passo successivo. Il modulo `src/lib/statistics.ts` prepara un riepilogo aggregato con periodo e metodo di calcolo, senza esportare foto, nomi dei capi o cronologia individuale. Non ci sono ancora account, amici, classifiche o condivisione automatica.
+I calcoli restano centralizzati in `src/lib/statistics.ts`. Non sono presenti account, amici, classifiche o condivisione automatica.
 
 ## Salvataggio e backup
 
@@ -82,7 +84,7 @@ Foto, outfit e preferenze vengono salvati in **IndexedDB nel browser**. La versi
 
 Per conservare o trasferire il guardaroba:
 
-1. Apri **Il tuo spazio → Esporta backup**. Il file JSON include anche le immagini.
+1. Apri **Profilo → Backup → Esporta backup**. Il file JSON include anche le immagini.
 2. Conserva il file in una posizione a tua scelta.
 3. Nell'altro browser o dispositivo, apri GET DRESSD e scegli **Importa backup**.
 4. Verifica il riepilogo e conferma: il ripristino **sostituisce** i dati già presenti in quel browser.

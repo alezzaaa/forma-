@@ -1,19 +1,45 @@
-import { CalendarDays, TrendingUp, Sparkles, ArrowUpRight } from 'lucide-react';
-import type { AppData, Garment } from '../types';
-import GarmentArt from '../components/GarmentArt';
-export default function History({ data, onEdit, onCreate }: {
+import { useEffect, useState } from 'react';
+import { ArrowLeft, ArrowUpRight, CalendarDays } from 'lucide-react';
+import type { AppData, Garment, Outfit, WearEvent } from '../types';
+import OutfitPreview, { OutfitArtwork } from '../components/OutfitPreview';
+import Modal from '../components/Modal';
+import './profile.css';
+
+function dateLabel(date: Date, today: Date) {
+    if (date.toDateString() === today.toDateString()) return 'Oggi';
+    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) return 'Ieri';
+    return date.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+export default function History({ data, onCreate, onVariant, onBack, onOpenStatistics }: {
     data: AppData;
-    onEdit: (g: Garment) => void;
+    onEdit?: (g: Garment) => void;
     onCreate: () => void;
+    onVariant: (o: Outfit | WearEvent) => void;
+    onBack?: () => void;
+    onOpenStatistics: () => void;
 }) {
-    const sorted = [...data.garments].sort((a, b) => b.wearCount - a.wearCount);
-    const most = sorted[0], least = sorted[sorted.length - 1];
-    const colors = Object.entries(data.garments.reduce<Record<string, {
-        count: number;
-        hex: string;
-    }>>((a, g) => { a[g.color] ??= { count: 0, hex: g.colorHex }; a[g.color].count += g.wearCount; return a; }, {})).filter(([, v]) => v.count > 0).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
-    const max = colors[0]?.[1].count || 1;
-    const cats = Object.entries(data.garments.reduce<Record<string, number>>((a, g) => { a[g.category] = (a[g.category] || 0) + 1; return a; }, {})).sort((a, b) => b[1] - a[1]);
-    return <div className="page"><div className="page-heading"><div><p className="eyebrow">IL TUO STILE, NEL TEMPO</p><h1>Giorno dopo giorno.</h1><p>Riscopri cosa ami. Dai spazio a quello che aspetta.</p></div><span className="soft-pill"><CalendarDays size={15}/>{data.history.length} look indossati</span></div><div className="history-insights">{[{ garment: most, title: 'IL TUO PUNTO FERMO', icon: TrendingUp, empty: 'Nessun capo ancora' }, { garment: least, title: 'DA RISCOPRIRE', icon: Sparkles, empty: 'Aggiungi un capo' }].map(({ garment, title, icon: Icon, empty }) => <button className="usage-card" key={title} onClick={() => garment && onEdit(garment)} disabled={!garment}><div><p className="eyebrow"><Icon size={13}/>{title}</p><h3>{garment?.name || empty}</h3><p>{garment ? `${garment.wearCount} ${garment.wearCount === 1 ? 'volta indossato' : 'volte indossato'}` : 'Il tuo stile inizia da una foto.'}</p></div>{garment && <div className="usage-art"><GarmentArt garment={garment}/></div>}<ArrowUpRight className="usage-arrow" size={17}/></button>)}<div className="colors-card"><p className="eyebrow">I COLORI CHE VIVI DI PIÙ</p>{colors.length ? colors.map(([name, { count, hex }]) => <div className="color-bar" key={name}><span className="color-dot" style={{ background: hex }}/><span>{name}</span><div><i style={{ width: `${count / max * 100}%`, background: hex }}/></div><strong>{count}</strong></div>) : <p className="muted">Indossa un outfit per scoprire la tua palette.</p>}</div></div>
- <div className="history-layout"><section><div className="section-heading"><h2>Il diario dei tuoi outfit</h2><span className="muted">Dal più recente</span></div>{data.history.length ? <div className="timeline">{[...data.history].sort((a, b) => b.date.localeCompare(a.date)).map(event => <article className="history-event" key={event.id}><div className="event-date"><strong>{new Date(event.date).getDate()}</strong><span>{new Date(event.date).toLocaleDateString('it-IT', { month: 'short', year: '2-digit' })}</span></div><div className="event-content"><h3>{event.name}</h3><p>{event.garmentIds.length} capi · {new Date(event.date).toLocaleDateString('it-IT', { weekday: 'long' })}</p><div className="history-garments">{event.garmentIds.map(id => data.garments.find(g => g.id === id)).filter((g): g is Garment => !!g).map(g => <button key={g.id} onClick={() => onEdit(g)} title={g.name} aria-label={g.name}><GarmentArt garment={g}/></button>)}</div></div></article>)}</div> : <div className="empty-state"><CalendarDays size={42}/><h2>Una pagina ancora da scrivere.</h2><p>Scegli “Indosso questo” per iniziare il tuo diario.</p><button className="button button-primary" onClick={onCreate}>Crea il primo look</button></div>}</section><aside className="distribution-card"><p className="eyebrow">IL TUO GUARDAROBA IN NUMERI</p><h3>Spazio a ogni dettaglio.</h3><div className="distribution-total"><strong>{data.garments.length}</strong><span>capi, tutti tuoi</span></div>{cats.map(([name, count]) => <div className="category-bar" key={name}><div><span>{name}</span><strong>{count}</strong></div><div className="bar-track"><span style={{ width: `${count / data.garments.length * 100}%` }}/></div></div>)}<div className="distribution-note">Le statistiche si aggiornano quando scegli cosa indossare.</div></aside></div></div>;
+    const [selectedId, setSelectedId] = useState<string | null>(null);
+    const [today, setToday] = useState(() => new Date());
+    const selected = data.history.find(event => event.id === selectedId);
+    useEffect(() => {
+        let midnight: ReturnType<typeof setTimeout>;
+        const refresh = () => { clearTimeout(midnight); const now = new Date(); setToday(now); const next = new Date(now); next.setHours(24, 0, 0, 0); midnight = setTimeout(refresh, Math.max(1, next.getTime() - now.getTime())); };
+        const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+        refresh(); document.addEventListener('visibilitychange', onVisible);
+        return () => { clearTimeout(midnight); document.removeEventListener('visibilitychange', onVisible); };
+    }, []);
+    const groups = new Map<string, { label: string; events: WearEvent[] }>();
+    for (const event of [...data.history].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())) {
+        const date = new Date(event.date), key = date.toDateString();
+        const group = groups.get(key) ?? { label: dateLabel(date, today), events: [] };
+        group.events.push(event); groups.set(key, group);
+    }
+    const available = selected?.garmentIds.map(id => data.garments.find(garment => garment.id === id)).filter((garment): garment is Garment => Boolean(garment)) ?? [];
+    return <div className="page diary-page">{onBack && <button className="button button-ghost profile-back" type="button" onClick={onBack}><ArrowLeft size={18} aria-hidden="true"/>Indietro</button>}<div className="page-heading"><h1>Cronologia</h1></div>
+        {groups.size ? [...groups].map(([key, group]) => <section className="diary-day" key={key}><h2>{group.label}</h2><div className="saved-grid">{group.events.map(event => <OutfitPreview key={event.id} name={event.name} garmentIds={event.garmentIds} garments={data.garments} onOpen={() => setSelectedId(event.id)}/>)}</div></section>) : <div className="empty-state"><CalendarDays size={42} strokeWidth={1.3} aria-hidden="true"/><h2>Qui trovi gli outfit che hai indossato.</h2><button className="button button-primary" type="button" onClick={onCreate}>Scegli un outfit</button></div>}
+        <button type="button" className="button button-ghost diary-statistics" onClick={onOpenStatistics}>Vedi statistiche<ArrowUpRight size={18} aria-hidden="true"/></button>
+        {selected && <Modal title={selected.name} onClose={() => setSelectedId(null)} className="saved-dialog"><div className="saved-dialog-scroll"><OutfitArtwork garmentIds={selected.garmentIds} garments={data.garments}/><p className="saved-context">Indossato {new Date(selected.date).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' })}</p><ul className="saved-piece-list">{available.map(garment => <li key={garment.id}><span className="color-dot" style={{ background: garment.colorHex }} aria-hidden="true"/><span>{garment.name}</span><span>{garment.category} · {garment.color}</span></li>)}</ul>{available.length < selected.garmentIds.length && <p className="muted">Alcuni capi non sono più disponibili nel guardaroba.</p>}</div><div className="saved-dialog-footer"><button type="button" className="button button-primary" disabled={available.length === 0} onClick={() => { setSelectedId(null); onVariant(selected); }}>Crea una variante</button></div></Modal>}
+    </div>;
 }

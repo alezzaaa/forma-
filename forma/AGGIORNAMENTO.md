@@ -1,30 +1,20 @@
-# Aggiornare il sito a GET DRESSD 1.1
+# Aggiornare GET DRESSD a 1.2
 
-Il pacchetto contiene la nuova versione. Il sito online cambia dopo che carichi i file e GitHub completa la pubblicazione.
+La modifica è sul branch `codex/get-dressd-1.2`, basato su `1db7a4f`. Revisionare la pull request e unirla a `main` per attivare il workflow GitHub Pages esistente. Il workflow continua a compilare `forma/` e pubblicare `forma/dist`. Non occorre cambiare repository, dominio o impostazioni Pages.
 
-1. Scarica ed estrai `GET-DRESSD-1.1.0.zip` sul computer.
-2. Apri il tuo repository [alezzaaa/forma-](https://github.com/alezzaaa/forma-).
-3. Nella pagina principale del repository scegli **Add file → Upload files**.
-4. Trascina la cartella **`forma`** estratta dallo ZIP. Deve sostituire i file negli stessi percorsi, per esempio `forma/package.json` e `forma/src/App.tsx`. Non entrare prima nella cartella `forma` su GitHub, altrimenti rischi di creare `forma/forma/`.
-5. Scrivi come messaggio `Aggiorna a GET DRESSD 1.1` e premi **Commit changes** sul ramo `main`.
-6. Apri **Actions** e aspetta che il workflow di pubblicazione diventi verde. Può ancora chiamarsi “Pubblica Forma”: il suo nome non influisce sull'app.
-7. Riapri [il sito](https://alezzaaa.github.io/forma-/) e ricarica la pagina. Troverai **GET DRESSD** e il widget **Statistiche** in **Tu / Il tuo spazio**.
+Prima del merge, dalla cartella `forma` con Node >= 22.13.0:
 
-Non caricare lo ZIP come unico file: GitHub Pages ha bisogno dei file estratti. Non caricare `node_modules`. Conserva il workflow esistente `.github/workflows/deploy.yml`: continua a compilare dalla cartella `forma` e pubblicare `forma/dist`. Non serve rinominare il repository né cambiare le impostazioni di Pages.
+```sh
+npm ci
+npm test
+npm run test:render
+npm run build
+```
 
-Il nome interno del database non cambia. Utilizzando lo stesso browser e lo stesso indirizzo, il guardaroba già salvato resta compatibile. Puoi conservare una copia anche da **Il tuo spazio → Esporta backup**.
+Per il pacchetto locale: `npm run package:standalone`; `npm start` serve la build su `http://127.0.0.1:4173`. Il file `GET-DRESSD.html` viene generato dalla build, senza modifiche manuali ai bundle.
 
-## Icona su iPhone
+Il database IndexedDB e il formato backup rimangono versione 1. Usando lo stesso browser e lo stesso indirizzo si continua ad accedere ai dati esistenti. Esporta un backup da **Profilo → Backup** prima di cambiare origine o cancellare i dati del browser.
 
-Apri il sito aggiornato in Safari, poi il menu di condivisione e **Aggiungi alla schermata Home**. Conferma il nome **GET DRESSD** e, se presente, attiva **Apri come app web**. Vedi la [guida Apple](https://support.apple.com/it-it/guide/iphone/iphea86e5236/ios).
+L’installazione in Home conserva manifest e icone della 1.1. Il sito non include un service worker: installazione e disponibilità offline sono proprietà diverse. Prima del rilascio verificare su iPhone reale Safari/Home, tastiera, safe area, rotazione, ritorno dal background e VoiceOver; i test desktop non sostituiscono queste prove.
 
-Se un'icona già presente mantiene il vecchio nome o disegno, puoi continuare a usarla: l'app si aggiorna visitando il sito. Prima di rimuovere una vecchia app dalla Home per aggiungerla nuovamente, conserva un backup del guardaroba.
-
-## Novità
-
-- Nome, icona e metadati **GET DRESSD**.
-- **Statistiche** personali con vista degli ultimi 30 giorni o di sempre; base tecnica per confrontarle in futuro con gli amici.
-- Navigazione, modali e controlli rivisti per il tocco su iPhone.
-- Caricamento HEIC/HEIF quando il browser può decodificare il formato, con messaggio dedicato negli altri casi.
-
-Il confronto con gli amici non è ancora attivo. I dati restano locali al browser e non vengono inviati a un servizio esterno.
+Dettagli: [verifiche](docs/TESTING.md) e [report 1.2](docs/GET_DRESSD_1.2_IMPLEMENTAZIONE.md).

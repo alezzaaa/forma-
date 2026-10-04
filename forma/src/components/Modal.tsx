@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { useModalSheet } from '../lib/useModalSheet';
@@ -8,6 +9,7 @@ export default function Modal({ title, children, onClose, className = '' }: {
     className?: string;
 }) {
     const ref = useModalSheet(onClose);
+    const titleId = useId();
     return <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget)
-        onClose(); }}><div className={`modal ${className}`} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} ref={ref}><div className="modal-heading"><h2>{title}</h2><button className="icon-button" onClick={onClose} aria-label="Chiudi"><X size={20}/></button></div>{children}</div></div>;
+        onClose(); }}><div className={`modal ${className}`} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} ref={ref}><div className="modal-heading"><h2 id={titleId}>{title}</h2><button className="icon-button" onClick={onClose} aria-label="Chiudi"><X size={20}/></button></div>{children}</div></div>;
 }

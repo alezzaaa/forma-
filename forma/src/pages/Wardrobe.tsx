@@ -1,22 +1,49 @@
-import { useMemo, useState } from 'react';
-import { Search, SlidersHorizontal, Plus, X, Shirt, Heart } from 'lucide-react';
-import type { AppData, Garment } from '../types';
-import { COLORS, SEASONS, STYLES, CATEGORIES, categorySlot } from '../lib/constants';
+import { useEffect, useMemo, useState } from 'react';
+import { Search, SlidersHorizontal, Plus, X, Shirt } from 'lucide-react';
+import type { AppData, Category, Garment } from '../types';
+import { activeFilterCount, emptyWardrobeFilters, filterWardrobe } from '../lib/wardrobe';
+import type { WardrobeSort } from '../lib/wardrobe';
 import GarmentCard from '../components/GarmentCard';
-export default function Wardrobe({ data, onUpload, onEdit, onFavorite, onLock }: {
-    data: AppData;
-    onUpload: () => void;
-    onEdit: (g: Garment) => void;
-    onFavorite: (g: Garment) => void;
-    onLock: (g: Garment) => void;
+import GarmentDetailSheet from '../components/GarmentDetailSheet';
+import WardrobeFilterSheet from '../components/WardrobeFilterSheet';
+import '../components/wardrobe.css';
+
+export default function Wardrobe({ data, onUpload, onEdit, onFavorite, onLock, onDelete, active = true }: {
+  data: AppData;
+  onUpload: (category?: Category) => void;
+  onEdit: (garment: Garment) => void;
+  onFavorite: (garment: Garment) => void;
+  onLock: (garment: Garment) => void;
+  onDelete?: (garment: Garment) => void;
+  active?: boolean;
 }) {
-    const [query, setQuery] = useState(''), [tab, setTab] = useState('all'), [filters, setFilters] = useState(false), [color, setColor] = useState(''), [season, setSeason] = useState(''), [style, setStyle] = useState(''), [category, setCategory] = useState(''), [formality, setFormality] = useState(''), [favorite, setFavorite] = useState(false), [recent, setRecent] = useState(false), [sort, setSort] = useState('new');
-    const filtered = useMemo(() => data.garments.filter(g => (tab === 'all' || categorySlot(g.category) === tab) && (!query || `${g.name} ${g.category} ${g.color} ${g.material} ${g.style}`.toLowerCase().includes(query.toLowerCase())) && (!color || g.color === color) && (!category || g.category === category) && (!season || g.seasons.includes(season as typeof g.seasons[number])) && (!style || g.style === style) && (!formality || g.formality === Number(formality)) && (!favorite || g.favorite) && (!recent || (g.lastWorn && Date.now() - new Date(g.lastWorn).getTime() < 7 * 86400000))).sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name) : sort === 'rare' ? a.wearCount - b.wearCount : b.createdAt.localeCompare(a.createdAt)), [data.garments, tab, query, color, season, style, category, formality, favorite, recent, sort]);
-    const active = [color, season, style, category, formality].filter(Boolean).length + (favorite ? 1 : 0) + (recent ? 1 : 0);
-    const clear = () => { setQuery(''); setTab('all'); setColor(''); setSeason(''); setStyle(''); setCategory(''); setFormality(''); setFavorite(false); setRecent(false); };
-    return <div className="page"><div className="page-heading"><div><p className="eyebrow">LA TUA COLLEZIONE PERSONALE</p><h1>Il guardaroba.</h1><p>{data.garments.length} capi. Un mondo di possibilità. {data.garments.some(g => g.demo) && <span className="demo-pill">Collezione demo inclusa</span>}</p></div><button className="button button-primary" onClick={onUpload}><Plus size={18}/> Aggiungi capi</button></div>
- <div className="wardrobe-toolbar"><div className="search-input"><Search size={18}/><input aria-label="Cerca nel guardaroba" placeholder="Cerca un capo, un colore, un’idea…" value={query} onChange={e => setQuery(e.target.value)}/>{query && <button className="icon-button" aria-label="Cancella ricerca" onClick={() => setQuery('')}><X size={15}/></button>}</div><button className={`button button-outline ${filters ? 'selected' : ''}`} onClick={() => setFilters(!filters)} aria-expanded={filters}><SlidersHorizontal size={16}/> Filtri {active > 0 && <span className="count-badge">{active}</span>}</button><button className={`button button-outline favorite-filter ${favorite ? 'selected' : ''}`} onClick={() => setFavorite(!favorite)} aria-pressed={favorite} aria-label="Mostra solo preferiti"><Heart size={17} fill={favorite ? 'currentColor' : 'none'}/></button></div>
- {filters && <div className="filter-panel"><label className="field">Categoria<select className="input" value={category} onChange={e => setCategory(e.target.value)}><option value="">Tutte</option>{CATEGORIES.map(v => <option key={v}>{v}</option>)}</select></label><label className="field">Colore<select className="input" value={color} onChange={e => setColor(e.target.value)}><option value="">Tutti</option>{COLORS.map(v => <option key={v.name}>{v.name}</option>)}</select></label><label className="field">Stagione<select className="input" value={season} onChange={e => setSeason(e.target.value)}><option value="">Tutte</option>{SEASONS.map(v => <option key={v}>{v}</option>)}</select></label><label className="field">Stile<select className="input" value={style} onChange={e => setStyle(e.target.value)}><option value="">Tutti</option>{STYLES.map(v => <option key={v}>{v}</option>)}</select></label><label className="field">Formalità<select className="input" value={formality} onChange={e => setFormality(e.target.value)}><option value="">Tutte</option>{[1, 2, 3, 4, 5].map(v => <option key={v} value={v}>{v} · {['Relax', 'Casual', 'Smart casual', 'Elegante', 'Formale'][v - 1]}</option>)}</select></label><label className="check-field"><input type="checkbox" checked={recent} onChange={e => setRecent(e.target.checked)}/> Indossati negli ultimi 7 giorni</label><button className="text-button" onClick={clear}>Azzera filtri <X size={14}/></button></div>}
- <div className="wardrobe-tabs"><div className="tabs" role="group" aria-label="Tipi di capo">{[['all', 'Tutti i capi'], ['top', 'Top'], ['bottom', 'Pantaloni'], ['outerwear', 'Giacche'], ['shoes', 'Scarpe'], ['accessory', 'Accessori']].map(([value, label]) => <button key={value} className={tab === value ? 'active' : ''} onClick={() => setTab(value)}>{label}{value === 'all' && <span>{data.garments.length}</span>}</button>)}</div><select className="sort-select" aria-label="Ordina i capi" value={sort} onChange={e => setSort(e.target.value)}><option value="new">Ultimi aggiunti</option><option value="name">Nome A–Z</option><option value="rare">Meno indossati</option></select></div>
- {filtered.length > 0 ? <><div className="results-count">{filtered.length} {filtered.length === 1 ? 'capo' : 'capi'} nella tua selezione</div><div className="garment-grid">{filtered.map(g => <GarmentCard key={g.id} garment={g} onEdit={() => onEdit(g)} onFavorite={() => onFavorite(g)} onLock={() => onLock(g)}/>)}</div></> : <div className="empty-state"><Shirt size={44} strokeWidth={1.2}/><h2>{data.garments.length ? 'Nessun capo, per ora.' : 'Il tuo guardaroba ti aspetta.'}</h2><p>{data.garments.length ? 'Prova un’altra ricerca o alleggerisci i filtri.' : 'Aggiungi i tuoi primi capi e iniziamo a creare.'}</p><button className="button button-primary" onClick={data.garments.length ? clear : onUpload}>{data.garments.length ? 'Azzera filtri' : 'Carica una foto'}</button></div>}</div>;
+  const [query, setQuery] = useState('');
+  const [filters, setFilters] = useState({ ...emptyWardrobeFilters });
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [sort, setSort] = useState<WardrobeSort>('new');
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const filtered = useMemo(() => filterWardrobe(data.garments, filters, query, sort), [data.garments, filters, query, sort]);
+  const count = activeFilterCount(filters);
+  const detail = data.garments.find(garment => garment.id === detailId);
+  useEffect(() => { if (!active) { setFilterOpen(false); setDetailId(null); } }, [active]);
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    const update = () => setKeyboardOpen(Boolean(viewport && window.innerHeight - viewport.height > 140));
+    update();
+    viewport?.addEventListener('resize', update);
+    window.addEventListener('resize', update);
+    return () => { viewport?.removeEventListener('resize', update); window.removeEventListener('resize', update); };
+  }, []);
+  return <div className={`page wardrobe-page${keyboardOpen ? ' wardrobe-keyboard-open' : ''}`}>
+    <div className="page-heading"><div><h1>Guardaroba</h1>{data.garments.some(garment => garment.demo) && <p>Stai esplorando capi di esempio.</p>}</div><button className="button button-primary wardrobe-header-add" onClick={() => onUpload()}><Plus size={18} />Aggiungi capo</button></div>
+    <div className="wardrobe-toolbar">
+      <div className="search-input"><Search size={18} /><input aria-label="Cerca un capo" placeholder="Cerca un capo" value={query} onChange={event => setQuery(event.target.value)} />{query && <button type="button" className="icon-button" aria-label="Cancella ricerca" onClick={() => setQuery('')}><X size={18} /></button>}</div>
+      <div className="wardrobe-filter-sort"><button className={`button button-outline${count ? ' selected' : ''}`} type="button" aria-haspopup="dialog" onClick={() => setFilterOpen(true)}><SlidersHorizontal size={18} />Filtri{count > 0 && <span className="count-badge">{count}</span>}</button><select className="sort-select" aria-label="Ordina i capi" value={sort} onChange={event => setSort(event.target.value as WardrobeSort)}><option value="new">Ultimi aggiunti</option><option value="name">Nome A–Z</option><option value="rare">Meno indossati</option></select></div>
+    </div>
+    {filtered.length ? <><p className="results-count" role="status">{filtered.length} {filtered.length === 1 ? 'capo' : 'capi'}</p><div className="garment-grid">{filtered.map(garment => <GarmentCard key={garment.id} garment={garment} onOpen={() => setDetailId(garment.id)} />)}</div></> : <div className="empty-state"><Shirt size={44} strokeWidth={1.2} /><h2>{data.garments.length ? 'Nessun capo trovato.' : 'Aggiungi i tuoi primi capi'}</h2><p>{data.garments.length ? 'Prova a cambiare i filtri o la ricerca.' : 'Puoi aggiungere una foto o compilare i dettagli a mano.'}</p>{data.garments.length ? <div className="wardrobe-empty-actions"><button className="button button-outline" type="button" onClick={() => setFilters({ ...emptyWardrobeFilters })}>Azzera filtri</button>{query && <button className="button button-ghost" type="button" onClick={() => setQuery('')}>Cancella ricerca</button>}</div> : <button className="button button-primary" type="button" onClick={() => onUpload()}>Aggiungi capo</button>}</div>}
+    <div className="wardrobe-add-bar"><button className="button button-primary" type="button" onClick={() => onUpload()}><Plus size={19} />Aggiungi capo</button></div>
+    {active && filterOpen && <WardrobeFilterSheet filters={filters} garments={data.garments} query={query} onClose={() => setFilterOpen(false)} onApply={next => { setFilters(next); setFilterOpen(false); }} />}
+    {active && detail && <GarmentDetailSheet garment={detail} onClose={() => setDetailId(null)} onCreate={onLock} onEdit={onEdit} onFavorite={onFavorite} onDelete={onDelete} />}
+  </div>;
 }

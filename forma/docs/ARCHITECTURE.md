@@ -66,3 +66,12 @@ La migrazione può mantenere gli attuali contratti TypeScript dietro un reposito
 | Confronto statistiche | Snapshot aggregati con metodo e periodo comuni, autorizzazione esplicita tra amici. |
 
 Queste estensioni non sono attive nell'MVP. Anche il meteo resta una scelta manuale finché non viene integrato un provider.
+
+
+## Sessioni 1.2 e compatibilità
+
+`AppData.version` rimane 1; il database `forma-wardrobe`, store `snapshots`, resta invariato. Oggi usa `TodaySession` in App, mai nel backup. Le pagine principali mantengono stato e scroll durante il cambio tab; le sheet si chiudono prima della navigazione. Un contatore transitorio distingue nuovi ingressi dallo stesso capo.
+
+I callback wear/save/reject espongono Promise e completano soltanto dopo la scrittura serializzata; gli errori restano recuperabili nelle viste. La deduplicazione avviene per firma dei capi e giorno locale. `getReplacementCandidates` e `replaceGarmentWith` separano scelta e applicazione, rivalidano l’inventario e preservano gli altri ID. Le varianti sono bozze indipendenti, normalizzate al contesto di Crea se provengono da un evento senza metadati.
+
+Il carosello usa CSS scroll-snap, pulsanti e indice calcolato dallo scroll. `useModalSheet` gestisce VisualViewport, scroll, focus, Escape e isolamento inert del contenuto sottostante. `GarmentFields` mantiene un solo modello per editor e revisione upload.

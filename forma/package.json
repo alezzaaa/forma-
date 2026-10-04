@@ -1,6 +1,6 @@
 {
   "name": "get-dressd",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,8 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "start": "node serve.mjs",
     "package:standalone": "npm run build && node scripts/standalone.mjs",
-    "test:render": "node scripts/verify-render.mjs"
+    "test:render": "node scripts/verify-render.mjs",
+    "test:browser": "node scripts/verify-browser.mjs"
   },
   "dependencies": {
     "react": "19.2.8",

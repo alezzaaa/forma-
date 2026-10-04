@@ -2,16 +2,12 @@
 html { -webkit-text-size-adjust: 100%; scroll-padding-top: 90px; }
 button, a, summary { touch-action: manipulation; }
 .brand { gap: 11px; padding-inline: 8px; }
-.brand-mark { width: 39px; height: 39px; padding: 0; border-radius: 12px; background: linear-gradient(135deg, #c0d7e9, #bcbfe4); font: 750 17px/1 -apple-system, BlinkMacSystemFont, sans-serif; font-style: normal; letter-spacing: -1.3px; }
+.brand-mark { width: 39px; height: 39px; padding: 0; border-radius: 12px; background: var(--accent); font: 750 17px/1 -apple-system, BlinkMacSystemFont, sans-serif; font-style: normal; letter-spacing: -1.3px; }
 .brand-wordmark { font-size: 18px; line-height: .98; letter-spacing: -.6px; font-weight: 700; }
 .startup-state .brand-mark { width: 68px; height: 68px; font-size: 30px; border-radius: 20px; }
-.mobile-wordmark, .mobile-today-heading { display: none; }
-.board-bottomline > div { min-width: 0; }
-.board-bottomline h3 { overflow-wrap: anywhere; }
-.board-wear { display: flex; align-items: center; justify-content: center; gap: 7px; flex-shrink: 0; min-height: 44px; max-width: 46%; border: 1px solid #62695d50; border-radius: 10px; background: #fff4; color: #384338; font-size: 11px; padding: 8px 11px; }
-.board-bottomline { gap: 12px; align-items: center; }
+.mobile-wordmark{ display: none; }
 .install-heading { display: flex; gap: 14px; align-items: center; margin-bottom: 19px; }
-.install-icon { flex-shrink: 0; width: 52px; height: 52px; display: grid; place-items: center; border-radius: 16px; color: #20283b; background: linear-gradient(135deg, #c0d7e9, #bcbfe4); font-size: 23px; font-weight: 750; letter-spacing: -1.4px; }
+.install-icon { flex-shrink: 0; width: 52px; height: 52px; display: grid; place-items: center; border-radius: 16px; color: #20283b; background: var(--accent); font-size: 23px; font-weight: 750; letter-spacing: -1.4px; }
 .install-heading h2 { font-size: 19px; margin: 4px 0 0; line-height: 1.25; }
 .install-heading .eyebrow { font-size: 9px !important; letter-spacing: 1px; }
 .install-card > p { font-size: 13px; color: #aeb7c4; line-height: 1.65; }
@@ -32,8 +28,6 @@ button, a, summary { touch-action: manipulation; }
 @media (hover: none), (pointer: coarse) {
   .button:hover:not(:disabled), .garment-card:hover .garment-image,
   .garment-card:hover .garment-open svg, .garment-card:hover .garment-open img { transform: none; box-shadow: none; }
-  .garment-lock { opacity: 1; transform: translate(-50%, 0); }
-  .hero-garment:hover { transform: none; }
 }
 
 @media (max-width: 760px) {
@@ -72,45 +66,12 @@ button, a, summary { touch-action: manipulation; }
   .search-input input { min-height: 48px; }
   .muted, .small-muted, .settings-card .muted { font-size: 13px; line-height: 1.65; }
 
-  /* One compact moodboard instead of a long marketing panel on a phone. */
-  .hero { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; border-radius: 23px; border: 1px solid #35404c; background: #202833; }
-  .mobile-today-heading { display: flex; grid-row: 1; align-items: center; gap: 12px; justify-content: space-between; padding: 21px 20px 19px; }
-  .mobile-today-heading .eyebrow { font-size: 9px !important; letter-spacing: 1.1px; margin-bottom: 8px; color: #aabacb; }
-  .mobile-today-heading h2 { font-size: 25px; letter-spacing: -.8px; margin: 0; line-height: 1.2; }
-  .mobile-today-heading h2 em { font-family: 'Iowan Old Style', Georgia, serif; font-weight: 400; color: #c6d5e4; }
-  .mobile-today-heading > svg { color: #bfcbdb; }
-  .hero-copy { display: contents; }
-  .hero-copy:after, .hero-copy > :not(.hero-cta) { display: none; }
-  .hero-copy .hero-cta { grid-row: 3; display: flex; margin: 15px; min-height: 50px; font-size: 14px; border-radius: 13px; gap: 10px; }
-  .hero-cta > svg:last-child { display: block; margin-left: auto; width: 18px; }
-  .hero-board { grid-row: 2; height: auto; min-height: 277px; padding: 15px 22px 13px; }
-  .board-topline { font-size: 8px; letter-spacing: 1.4px; }
-  .hero-flatlay { min-height: 213px; width: min(100%, 370px); align-self: center; }
-  .hero-garment-0 { height: 83%; width: 53%; left: -2%; top: -3%; }
-  .hero-garment-1 { height: 97%; width: 48%; right: 0; top: 0; }
-  .hero-garment-2 { width: 40%; height: 41%; left: 0; bottom: -2%; }
-  .hero-garment-3 { width: 47%; height: 69%; left: 25%; top: 7%; }
-  .board-bottomline { margin-top: 0; padding-top: 9px; gap: 10px; }
-  .board-bottomline h3 { font-size: 17px; line-height: 1.2; }
-  .small-caps { font-size: 8px; letter-spacing: 1px; }
-  .board-wear { min-height: 44px; font-size: 12px; border-radius: 12px; padding: 9px; }
-  .hero-empty { min-height: 240px; text-align: center; }
-  .stats-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 21px 0; padding: 25px 0; margin-bottom: 28px; }
-  .stat { padding-inline: 20px; }
-  .stat:nth-child(2) { border-right: 0; padding-right: 0; }
-  .stat:nth-child(3) { padding-left: 0; }
-  .stat-value { font-size: 31px; margin-bottom: 7px; }
-  .stat > span { font-size: 11px; line-height: 1.4; }
-  .stat-value svg { width: 18px; height: 18px; }
-
   .garment-grid, .home-garments { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 23px 13px; }
   .garment-image, .home-garments .garment-image { aspect-ratio: 1 / 1.25; border-radius: 17px; }
   .garment-open, .home-garments .garment-open { padding: 28px 5px 43px; }
   .garment-heart, .home-garments .garment-heart { width: 44px; height: 44px; right: 3px; top: 2px; }
   .garment-heart svg, .home-garments .garment-heart svg { width: 18px; height: 18px; }
   .garment-tag, .home-garments .garment-tag { top: 15px; left: 12px; max-width: calc(100% - 57px); font-size: 10px; line-height: 1.25; }
-  .garment-lock, .home-garments .garment-lock { display: flex; justify-content: center; min-height: 44px; width: calc(100% - 16px); padding: 9px 5px; bottom: 7px; font-size: 10px; gap: 5px; opacity: 1; transform: translate(-50%, 0); border-radius: 11px; }
-  .garment-lock svg { width: 13px; height: 13px; }
   .garment-info { padding-top: 8px; }
   .garment-info > button, .home-garments .garment-info > button { font-size: 14px; min-height: 44px; line-height: 1.35; align-items: flex-start; padding: 5px 0; }
   .garment-info p, .home-garments .garment-info p { font-size: 11px; line-height: 1.5; flex-wrap: wrap; gap: 5px; margin-top: 1px; }
@@ -167,19 +128,6 @@ button, a, summary { touch-action: manipulation; }
   .learning-card p { font-size: 13px; }
   .data-actions > div:last-child { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr); }
   .data-actions .button { font-size: 14px; }
-  .page-footer, .page-footer span:first-child, .page-footer span:last-child { font-size: 10px; line-height: 1.5; }
-  .page-footer span:nth-child(2) { font-size: 12px; }
-
-  .rediscover { padding: 20px; align-items: flex-start; gap: 12px; }
-  .rediscover > div:nth-child(2) { padding-right: 31px; }
-  .rediscover h3 { font-size: 16px; line-height: 1.35; }
-  .rediscover .eyebrow { font-size: 9px !important; }
-  .rediscover p:last-child { font-size: 13px; }
-  .rediscover .circle-button { width: 44px; height: 44px; min-width: 44px; right: 10px; top: 11px; }
-  .small-insight { flex-wrap: wrap; gap: 11px; }
-  .small-insight .eyebrow { font-size: 9px !important; }
-  .small-insight p { font-size: 12px; }
-  .recent-line, .recent-line .text-button { font-size: 12px; }
 
   .history-insights { grid-template-columns: minmax(0, 1fr); gap: 14px; }
   .usage-card { padding: 22px; min-height: 170px; border-radius: 20px; }
@@ -210,11 +158,11 @@ button, a, summary { touch-action: manipulation; }
 
   .mobile-nav { height: var(--mobile-nav-height); padding: 7px max(8px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(8px, env(safe-area-inset-left, 0px)); gap: 0; background: #171a20f0; border-top: 1px solid #45495477; backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px); box-shadow: 0 -12px 30px #00000012; }
   .mobile-nav button { flex: 1; min-width: 0; min-height: 59px; font-size: 11px; line-height: 1.2; padding: 0 2px 6px; gap: 2px; color: #939da9; background: transparent; border-radius: 14px; }
-  .mobile-nav button:nth-child(4) { color: #939da9; }
+
   .mobile-nav button.active { color: #e1eaf4; background: transparent; }
   .mobile-nav-icon { width: 45px; height: 33px; display: grid; place-items: center; border-radius: 12px; }
   .mobile-nav button.active .mobile-nav-icon { background: #c0d6ed18; }
-  .mobile-nav button.mobile-create .mobile-nav-icon { background: linear-gradient(130deg, #c8daeb, #bcbfe0); color: #263343; box-shadow: 0 3px 14px #bdc6e316; }
+  .mobile-nav button.mobile-create .mobile-nav-icon { background: var(--accent); color: #263343; box-shadow: 0 3px 14px #bdc6e316; }
   .mobile-nav button.mobile-create.active .mobile-nav-icon { background: #e0e8f6; }
   .toast { bottom: calc(var(--mobile-nav-height) + 12px); font-size: 13px; padding: 8px 12px; gap: 9px; border-radius: 15px; }
   .toast > svg { flex-shrink: 0; }
@@ -232,12 +180,35 @@ button, a, summary { touch-action: manipulation; }
 
 @media (max-width: 360px) {
   .page { padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); }
-  .mobile-today-heading { padding: 18px 16px; }
-  .mobile-today-heading h2 { font-size: 23px; }
-  .mobile-today-heading > svg { display: none; }
-  .board-bottomline { align-items: stretch; flex-direction: column; gap: 8px; }
-  .board-wear { max-width: 100%; }
   .settings-card, .settings-right .settings-card { padding: 19px; }
   .garment-info > button, .home-garments .garment-info > button { font-size: 13px; }
-  .garment-lock, .home-garments .garment-lock { font-size: 9px; }
 }
+
+@media (max-width: 760px) {
+  .mobile-nav button.active > span:last-child { font-weight: 750; text-decoration: underline; text-underline-offset: 4px; }
+  .is-secondary .main-content { padding-bottom: max(24px, env(safe-area-inset-bottom, 0px)); }
+  .is-secondary .toast { bottom: max(16px, env(safe-area-inset-bottom, 0px)); }
+  .home-page { padding-top: 16px; }
+  .today-look .outfit-collage { height: 300px; min-height: 0; aspect-ratio: auto; }
+  .today-look .outfit-collage--grid { height: auto; min-height: calc(var(--outfit-grid-rows) * 130px); }
+  .today-look .outfit-card-heading h3 { font-size: 23px; line-height: 1.25; }
+  .today-look .outfit-card-body { padding-top: 12px; }
+  .today-look .outfit-explanation { font-size: 14px; line-height: 1.5; min-height: 0; }
+  .today-look .outfit-card-actions { margin: 4px 0 0; }
+  .today-demo { margin-top: 20px; }
+  .today-actions { flex-wrap: wrap; }
+  .today-secondary { margin-top: 34px; }
+  .today-secondary .section-heading h2 { font-size: 21px; }
+  .garment-open, .home-garments .garment-open { padding: 12px; }
+  .is-wardrobe .toast { bottom: calc(var(--mobile-nav-height) + 84px); }
+  :root[data-keyboard-open] .is-wardrobe .toast { bottom: calc(var(--mobile-nav-height) + 12px); }
+  :root[data-keyboard-open] .mobile-nav { display: none; }
+}
+@media (max-width: 360px), (max-height: 500px) and (orientation: landscape) {
+  .today-look .outfit-collage { height: 280px; }
+  .today-look .outfit-collage--grid { height: auto; }
+  .today-secondary .section-heading { flex-wrap: wrap; }
+}
+
+/* Notifications never cover the active sheet or invite focus into inert content. */
+.app-shell:has([role="dialog"]) > .toast { visibility: hidden; }

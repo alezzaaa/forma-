@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateOutfits, outfitSignature, outfitWarnings, replaceGarment } from '../src/lib/engine.ts';
+import { generateOutfits, getReplacementCandidates, isCompleteOutfit, outfitSignature, outfitWarnings, prepareInitialDraft, replaceGarment, replaceGarmentWith } from '../src/lib/engine.ts';
 import { categorySlot } from '../src/lib/constants.ts';
 import type { Category, Garment, GenerateOptions, Preferences } from '../src/types.ts';
 
@@ -154,4 +154,96 @@ test('occasion changes gym versus dinner recommendations while chosen formality 
   assert.equal(dinner.style, 'Elegante');
   const casualDinner = generateOutfits([...basics, garment('formal-shirt', 'Camicia', { style: 'Elegante', formality: 5 })], preferences, { ...options, occasion: 'Cena', formality: 1 }, 1).outfits[0];
   assert.ok(casualDinner.garmentIds.includes('top'));
+});
+
+
+test('replacement candidates share the slot while season, style and formality remain weighted', () => {
+  const original = generateOutfits(basics, preferences, options, 1).outfits[0];
+  const wardrobe = [...basics, garment('polo', 'Polo'), garment('formal', 'Camicia', { style: 'Elegante', seasons: ['Inverno'], formality: 5 }), garment('coat', 'Cappotto'), garment('warm', 'Maglione')];
+  const candidates = getReplacementCandidates(original, 'top', wardrobe, preferences, { ...options, temperature: 30 });
+  assert.deepEqual(candidates.map(item => item.id), ['polo', 'formal']);
+});
+
+test('explicit replacement applies the chosen candidate and preserves every other ID and lock', () => {
+  const lockedIds = ['bottom', 'ring', 'watch'];
+  const wardrobe = [...basics, garment('ring', 'Accessori'), garment('watch', 'Accessori'), garment('polo', 'Polo'), garment('formal', 'Camicia', { formality: 5, seasons: ['Inverno'] })];
+  const context = { ...options, lockedIds };
+  const original = { ...generateOutfits(wardrobe.filter(item => !['polo', 'formal'].includes(item.id)), preferences, context, 1).outfits[0], favorite: true, rating: 5, notes: 'Original note', lastWorn: '2026-01-01T12:00:00.000Z' };
+  const snapshot = JSON.stringify(original);
+  const changed = replaceGarmentWith(original, 'top', wardrobe, preferences, context, 'formal')!;
+  assert.ok(changed);
+  assert.notEqual(changed.id, original.id);
+  assert.deepEqual(changed.garmentIds, original.garmentIds.map(id => id === 'top' ? 'formal' : id));
+  assert.ok(lockedIds.every(id => changed.garmentIds.includes(id)));
+  assert.equal(changed.favorite, false);
+  assert.equal(changed.rating, 0);
+  assert.equal(changed.notes, '');
+  assert.equal(changed.lastWorn, null);
+  assert.equal(JSON.stringify(original), snapshot);
+  assert.match(outfitWarnings([changed], wardrobe, preferences, context).join(' '), /formalità/);
+});
+
+test('replacement never offers disliked combinations or copies of another visible proposal', () => {
+  const original = generateOutfits(basics, preferences, options, 1).outfits[0];
+  const wardrobe = [...basics, garment('polo', 'Polo'), garment('shirt', 'Camicia'), garment('tee', 'T-shirt')];
+  const disliked = { ...preferences, dislikedSignatures: [outfitSignature(['polo', 'bottom', 'shoes'])] };
+  const visible = [outfitSignature(['shirt', 'bottom', 'shoes'])];
+  assert.deepEqual(getReplacementCandidates(original, 'top', wardrobe, disliked, options, visible).map(item => item.id), ['tee']);
+  assert.equal(replaceGarmentWith(original, 'top', wardrobe, disliked, options, 'polo', visible), null);
+  assert.equal(replaceGarmentWith(original, 'top', wardrobe, disliked, options, 'shirt', visible), null);
+});
+
+test('explicit replacement revalidates deletion, category, temperature, locks and duplicate IDs', () => {
+  const original = generateOutfits(basics, preferences, options, 1).outfits[0];
+  const wardrobe = [...basics, garment('candidate', 'Polo')];
+  assert.equal(getReplacementCandidates(original, 'top', wardrobe, preferences, options)[0].id, 'candidate');
+  assert.equal(replaceGarmentWith(original, 'top', basics, preferences, options, 'candidate'), null);
+  assert.equal(replaceGarmentWith(original, 'top', [...basics, garment('candidate', 'Jeans')], preferences, options, 'candidate'), null);
+  assert.equal(replaceGarmentWith(original, 'top', [...basics, garment('candidate', 'Maglione')], preferences, { ...options, temperature: 30 }, 'candidate'), null);
+  assert.equal(replaceGarmentWith(original, 'top', wardrobe, preferences, { ...options, lockedIds: ['top'] }, 'candidate'), null);
+  assert.equal(replaceGarmentWith(original, 'top', wardrobe, preferences, { ...options, lockedIds: ['missing'] }, 'candidate'), null);
+  assert.equal(replaceGarmentWith(original, 'top', wardrobe, preferences, options, 'bottom'), null);
+  assert.equal(replaceGarmentWith({ ...original, garmentIds: [...original.garmentIds, 'top'] }, 'top', wardrobe, preferences, options, 'candidate'), null);
+  assert.equal(replaceGarmentWith(original, 'top', wardrobe.filter(item => item.id !== 'shoes'), preferences, options, 'candidate'), null);
+});
+
+test('replacing one accessory preserves the other accessories without adding an existing ID', () => {
+  const wardrobe = [...basics, garment('ring', 'Accessori'), garment('watch', 'Accessori'), garment('belt', 'Accessori')];
+  const original = generateOutfits(wardrobe, preferences, { ...options, lockedIds: ['ring', 'watch'] }, 1).outfits[0];
+  const context = { ...options, lockedIds: ['watch'] };
+  assert.deepEqual(getReplacementCandidates(original, 'ring', wardrobe, preferences, context).map(item => item.id), ['belt']);
+  const changed = replaceGarmentWith(original, 'ring', wardrobe, preferences, context, 'belt')!;
+  assert.equal(changed.garmentIds.length, original.garmentIds.length);
+  assert.ok(changed.garmentIds.includes('watch'));
+});
+
+test('generation exhausts seen and disliked signatures instead of silently repeating them', () => {
+  const only = outfitSignature(basics.map(item => item.id));
+  assert.deepEqual(generateOutfits(basics, preferences, options, 3, [only]).outfits, []);
+  assert.deepEqual(generateOutfits(basics, { ...preferences, dislikedSignatures: [only] }, options).outfits, []);
+});
+
+test('wear-event drafts resolve absent metadata from the current Create context before saving', () => {
+  const original = { ...generateOutfits(basics, preferences, options, 1).outfits[0], occasion: '', explanation: '' };
+  const context = { ...options, occasion: 'Cena', season: 'Autunno' as const, style: 'Elegante' as const };
+  const draft = prepareInitialDraft(original, basics, preferences, context);
+  assert.equal(draft.occasion, 'Cena');
+  assert.equal(draft.season, 'Autunno');
+  assert.equal(draft.style, 'Elegante');
+  assert.ok(draft.explanation.length > 20);
+  assert.deepEqual(draft.garmentIds, original.garmentIds);
+  assert.equal(original.occasion, '');
+  assert.equal(original.explanation, '');
+  assert.equal(prepareInitialDraft(original, basics, preferences, { ...context, style: 'Qualsiasi' }).style, 'Minimal');
+});
+
+test('saved-outfit drafts retain original occasion, season and style independently of current defaults', () => {
+  const original = generateOutfits(basics, preferences, options, 1).outfits[0];
+  const draft = prepareInitialDraft(original, basics, preferences, { ...options, occasion: 'Cena', season: 'Inverno', style: 'Elegante' });
+  assert.equal(draft.occasion, original.occasion);
+  assert.equal(draft.season, original.season);
+  assert.equal(draft.style, original.style);
+  assert.ok(isCompleteOutfit(draft, basics));
+  assert.equal(isCompleteOutfit({ ...draft, garmentIds: ['top', 'bottom'] }, basics), false);
+  assert.equal(isCompleteOutfit(draft, basics.filter(item => item.id !== 'shoes')), false);
 });

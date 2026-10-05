@@ -3,6 +3,7 @@ import { Home as HomeIcon, Shirt, Layers3, Plus, History as HistoryIcon, Setting
 import type { AppData, Category, Garment, Outfit, Preferences, WearEvent } from './types';
 import { loadData, saveData } from './lib/storage';
 import { currentSeason } from './lib/constants';
+import { createId } from './lib/id';
 import { outfitSignature } from './lib/engine';
 import { createTodaySession } from './lib/todaySession';
 import { readPageScrollPosition } from './lib/useModalSheet';
@@ -89,7 +90,7 @@ export default function App() {
   const variant = (source: Outfit | WearEvent) => {
     const now = new Date().toISOString();
     // An event has no context metadata; Create applies its current context to this entry.
-    setDraft('occasion' in source ? { ...source, id: crypto.randomUUID(), garmentIds: [...source.garmentIds], favorite: false, lastWorn: null, createdAt: now } : { id: crypto.randomUUID(), name: source.name, garmentIds: [...source.garmentIds], occasion: '', season: currentSeason(), style: dataRef.current!.preferences.preferredStyle, rating: 0, favorite: false, createdAt: now, lastWorn: null, notes: '', explanation: '', score: 0 });
+    setDraft('occasion' in source ? { ...source, id: createId(), garmentIds: [...source.garmentIds], favorite: false, lastWorn: null, createdAt: now } : { id: createId(), name: source.name, garmentIds: [...source.garmentIds], occasion: '', season: currentSeason(), style: dataRef.current!.preferences.preferredStyle, rating: 0, favorite: false, createdAt: now, lastWorn: null, notes: '', explanation: '', score: 0 });
     setLocked([]); setCreateEntryRevision(revision => revision + 1); navigate('create');
   };
   const saveOutfit = async (outfit: Outfit): Promise<void> => { let saved = false; await commit(current => { const next = toggleSavedOutfit(current, outfit); saved = next.outfits.some(o => outfitSignature(o.garmentIds) === outfitSignature(outfit.garmentIds) && o.favorite); return next; }); notify(saved ? 'Outfit salvato.' : 'Outfit rimosso dai salvati.'); };

@@ -1,5 +1,6 @@
 import type { Garment, GenerateOptions, GenerateResult, Outfit, Preferences, Slot, Style } from '../types.ts';
 import { categorySlot, SLOT_LABELS } from './constants.ts';
+import { createId } from './id.ts';
 
 const REQUIRED_SLOTS: Slot[] = ['top', 'bottom', 'shoes'];
 const SLOT_ORDER: Slot[] = [...REQUIRED_SLOTS, 'outerwear', 'accessory'];
@@ -150,7 +151,7 @@ function createOutfit(items: Garment[], preferences: Preferences, options: Gener
   const descriptions = ['Il tuo equilibrio', 'Un altro punto di vista', 'Cambio di ritmo', 'La tua alternativa'];
   const score = Math.max(0, Math.min(100, Math.round(combinationScore(items, preferences, options))));
   return {
-    id: globalThis.crypto.randomUUID(), name: descriptions[index % descriptions.length],
+    id: createId(), name: descriptions[index % descriptions.length],
     garmentIds: ordered(items).map(item => item.id), occasion: options.occasion, season: options.season,
     style: options.style === 'Qualsiasi' ? inferredStyle(items, preferences) : options.style,
     rating: 0, favorite: false, createdAt: new Date().toISOString(), lastWorn: null,
@@ -303,7 +304,7 @@ export function replaceGarmentWith(outfit: Outfit, garmentId: string, garments: 
   if (!replacement) return null;
   const byId = new Map(garments.map(item => [item.id, item]));
   const items = outfit.garmentIds.map(id => id === garmentId ? replacement : byId.get(id)!);
-  return { ...outfit, id: globalThis.crypto.randomUUID(), createdAt: new Date().toISOString(),
+  return { ...outfit, id: createId(), createdAt: new Date().toISOString(),
     garmentIds: items.map(item => item.id), explanation: describe(items),
     score: Math.max(0, Math.min(100, Math.round(combinationScore(items, preferences, options)))),
     style: options.style === 'Qualsiasi' ? inferredStyle(items, preferences) : options.style,

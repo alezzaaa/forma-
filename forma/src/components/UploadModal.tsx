@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Camera, Check, ImagePlus, LoaderCircle, Plus, RotateCcw, ScanLine, Eraser, Pencil, UploadCloud, X } from 'lucide-react';
 import type { Category, Garment } from '../types';
 import { SEASONS } from '../lib/constants';
+import { createId } from '../lib/id';
 import { garmentValidationIssue } from '../lib/wardrobe';
 import GarmentArt from './GarmentArt';
 import { LocalRecognitionProvider, MAX_UPLOAD_FILES, removeUniformBackground } from '../lib/recognition';
@@ -61,7 +62,7 @@ export default function UploadModal({ onClose, onSave, initialCategory }: { onCl
   };
   const addManual = () => {
     if (busy || drafts.length >= MAX_UPLOAD_FILES) return;
-    const garment: Garment = { id: crypto.randomUUID(), name: 'Nuovo capo', category: initialCategory ?? 'T-shirt', subcategory: '', color: 'Grigio', colorHex: '#90918c', secondaryColors: [], style: 'Casual', seasons: [...SEASONS], formality: 2, material: '', pattern: 'Tinta unita', image: '', favorite: false, wearCount: 0, lastWorn: null, createdAt: new Date().toISOString(), demo: false };
+    const garment: Garment = { id: createId(), name: 'Nuovo capo', category: initialCategory ?? 'T-shirt', subcategory: '', color: 'Grigio', colorHex: '#90918c', secondaryColors: [], style: 'Casual', seasons: [...SEASONS], formality: 2, material: '', pattern: 'Tinta unita', image: '', favorite: false, wearCount: 0, lastWorn: null, createdAt: new Date().toISOString(), demo: false };
     setDrafts(current => [...current, { garment, originalImage: '', needsCategory: false, backgroundRemoved: false }]);
     setActive(drafts.length); setError('');
   };

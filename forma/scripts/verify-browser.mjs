@@ -13,6 +13,9 @@ const url = server.resolvedUrls.local[0];
 const browser = await chromium.launch({ executablePath: process.env.CHROME_EXECUTABLE || undefined, headless: true });
 const results = [], errors = [];
 const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 1, timezoneId: 'Europe/Rome' });
+if (process.env.QA_UUID_FALLBACK) {
+  await context.addInitScript(() => Object.defineProperty(globalThis.crypto, 'randomUUID', { configurable: true, value: undefined }));
+}
 await context.addInitScript(() => {
   window.__failWrites = 0;
   const original = IDBDatabase.prototype.transaction;
@@ -38,6 +41,11 @@ async function capture(name) { await page.screenshot({ path: resolve(output, `${
 async function noOverflow(label) { assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${label}: page overflow`); }
 try {
   await page.goto(url);
+  if (process.env.QA_UUID_FALLBACK) {
+    assert.equal(await page.evaluate(() => typeof crypto.randomUUID), 'undefined');
+    assert.equal(await page.evaluate(() => typeof crypto.getRandomValues), 'function');
+    log('UUID fallback: randomUUID unavailable, getRandomValues available');
+  }
   await today().getByRole('button', { name: 'Indosso questo', exact: true }).waitFor();
   assert.equal(await page.locator('.mobile-nav button').count(), 4);
   const rect = await today().locator('.outfit-wear-button').boundingBox();

@@ -1,5 +1,6 @@
 import type { Category, Garment, Season, Style } from '../types';
 import { CATEGORIES, COLORS } from './constants';
+import { createId } from './id';
 
 export const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 export const MAX_UPLOAD_FILES = 20;
@@ -138,7 +139,7 @@ export class LocalRecognitionProvider implements RecognitionProvider {
       const seasons: Season[] = ['Primavera', 'Estate', 'Autunno', 'Inverno'];
       progress?.({ phase: 'Bozza pronta da verificare', percent: 100 });
       return { source: 'local', categoryDetected: Boolean(hinted), garment: {
-        id: crypto.randomUUID(), name: hinted ? filename.charAt(0).toUpperCase() + filename.slice(1) : 'Nuovo capo',
+        id: createId(), name: hinted ? filename.charAt(0).toUpperCase() + filename.slice(1) : 'Nuovo capo',
         category, subcategory: '', color: colors.primary.name, colorHex: colors.primary.hex,
         secondaryColors: colors.secondary, style: 'Casual', seasons, formality: 2, material: '', pattern: 'Da verificare',
         image: compressed, favorite: false, wearCount: 0, lastWorn: null, createdAt: new Date().toISOString(), demo: false,

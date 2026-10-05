@@ -1,5 +1,6 @@
 import type {AppData, Outfit} from '../types.ts';
 import {outfitSignature} from './engine.ts';
+import {createId} from './id.ts';
 
 function checkedGarmentIds(data:AppData, outfit:Outfit):Set<string> {
   const ids=new Set(outfit.garmentIds);
@@ -13,7 +14,7 @@ function checkedGarmentIds(data:AppData, outfit:Outfit):Set<string> {
 function latest(a:string|null,b:string):string {return a&&Date.parse(a)>Date.parse(b)?a:b;}
 
 function newSavedOutfit(data:AppData,outfit:Outfit):Outfit {
-  return {...outfit,id:data.outfits.some(item=>item.id===outfit.id)?crypto.randomUUID():outfit.id,garmentIds:[...outfit.garmentIds]};
+  return {...outfit,id:data.outfits.some(item=>item.id===outfit.id)?createId():outfit.id,garmentIds:[...outfit.garmentIds]};
 }
 
 /** Immutable state operations; persistence and UI messages remain the caller's responsibility. */
@@ -53,7 +54,7 @@ export function recordWornOutfit(data:AppData,outfit:Outfit,now=new Date().toISO
   return {alreadyRecorded:false,data:{...data,
     garments:data.garments.map(garment=>wornIds.has(garment.id)?{...garment,wearCount:garment.wearCount+1,lastWorn:latest(garment.lastWorn,date)}:garment),
     outfits:existing?data.outfits.map(item=>outfitSignature(item.garmentIds)===signature?{...item,lastWorn:latest(item.lastWorn,date)}:item):[nextSaved,...data.outfits],
-    history:[{id:crypto.randomUUID(),outfitId:saved.id,garmentIds:[...saved.garmentIds],date,name:saved.name},...data.history],
+    history:[{id:createId(),outfitId:saved.id,garmentIds:[...saved.garmentIds],date,name:saved.name},...data.history],
   }};
 }
 
